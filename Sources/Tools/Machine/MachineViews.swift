@@ -18,6 +18,135 @@ enum Bytes {
     static func mem(_ bytes: Int64) -> String { bytes >= 1 << 30 ? gb(bytes) : String(format: "%.0f MB", Double(bytes) / Double(1 << 20)) }
 }
 
+enum MachineCopy {
+    static let serversTitle = "LOCAL SERVERS"
+    static let serversCaption = "Dev servers, databases and tools you started that listen on a port. Stop them when you are done to free memory."
+    static let noServers = "Nothing you started is listening on a port."
+    static let heaviestTitle = "HEAVIEST APPS & PROCESSES"
+}
+
+// Two clicks: the first arms the button, the second sends the signal.
+struct ConfirmingButton: View {
+    let title: String
+    let confirmTitle: String
+    let action: () -> Void
+    @ViewState private var armed = false
+    var body: some View {
+        if armed {
+            HStack(spacing: 8) {
+                Button("Cancel") { armed = false }.buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Palette.muted)
+                Button(confirmTitle) { armed = false; action() }.buttonStyle(ActionStyle(primary: true))
+            }
+        } else {
+            Button(title) { armed = true }.buttonStyle(ActionStyle())
+        }
+    }
+}
+
+struct ProcessStopControl: View {
+    @EnvironmentObject var machine: MachineStore
+    let process: ProcessRow
+    let name: String
+    var body: some View {
+        if !MachineParse.canSignal(process) {
+            EmptyView()
+        } else if machine.canForceStop(process) {
+            Button("Force stop") { Task { await machine.stop(process, name: name, force: true) } }.buttonStyle(ActionStyle(primary: true))
+        } else if machine.stopping[process.pid] != nil {
+            ProgressView().controlSize(.small)
+        } else {
+            ConfirmingButton(title: "Stop", confirmTitle: "Stop it") { Task { await machine.stop(process, name: name) } }
+                .disabled(machine.demo)
+        }
+    }
+}
+
+struct AppQuitControl: View {
+    @EnvironmentObject var machine: MachineStore
+    let group: ProcessGroup
+    var body: some View {
+        if !MachineParse.canQuit(group) {
+            EmptyView()
+        } else if machine.canForceQuit(group) {
+            Button("Force quit") { Task { await machine.quit(group, force: true) } }.buttonStyle(ActionStyle(primary: true))
+        } else if let bundle = group.appBundle, machine.quitting[bundle] != nil {
+            ProgressView().controlSize(.small)
+        } else {
+            ConfirmingButton(title: "Quit", confirmTitle: "Quit \(group.name)") { Task { await machine.quit(group) } }
+                .disabled(machine.demo)
+        }
+    }
+}
+
+struct ListenerRow: View {
+    let listener: Listener
+    var compact = false
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 7) {
+                    Text(listener.name).font(.system(size: compact ? 14 : 15, weight: .semibold)).lineLimit(1)
+                    ForEach(listener.ports, id: \.self) { Tag(text: ":\($0)", color: Palette.accent) }
+                }
+                Text(verbatim: "PID \(listener.process.pid) · \(listener.process.commandLine)")
+                    .font(.system(size: 11, design: .monospaced)).foregroundStyle(Palette.muted).lineLimit(1).truncationMode(.middle)
+            }
+            Spacer(minLength: 8)
+            ProcessStopControl(process: listener.process, name: listener.name)
+        }.padding(12).background(Palette.surface).clipShape(RoundedRectangle(cornerRadius: 9))
+            .help("\(listener.process.commandLine)\n\(listener.addresses.joined(separator: ", "))")
+    }
+}
+
+// An app gets Quit; a command-line tool expands into its processes, each with Stop.
+struct GroupRow: View {
+    let group: ProcessGroup
+    var compact = false
+    @ViewState private var expanded = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                if group.appBundle == nil {
+                    Button { expanded.toggle() } label: {
+                        Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
+                            .rotationEffect(.degrees(expanded ? 90 : 0)).frame(width: 14)
+                    }.buttonStyle(.plain).foregroundStyle(Palette.muted).accessibilityLabel(expanded ? "Hide processes" : "Show processes")
+                } else {
+                    Image(systemName: "app").font(.system(size: 11)).foregroundStyle(Palette.muted).frame(width: 14)
+                }
+                Text(group.name).font(.system(size: compact ? 13 : 14, weight: .medium)).lineLimit(1)
+                if !compact && group.processes.allSatisfy(\.isSystem) { Tag(text: "macOS") }
+                if !compact {
+                    Text(verbatim: group.processes.count == 1 ? "1 process" : "\(group.processes.count) processes").font(.system(size: 12)).foregroundStyle(Palette.muted)
+                }
+                Spacer(minLength: 6)
+                if !compact {
+                    Text(String(format: "%.0f%% CPU", group.cpu)).font(.system(size: 13)).foregroundStyle(Palette.muted).monospacedDigit().frame(width: 80, alignment: .trailing)
+                }
+                Text(Bytes.mem(group.residentBytes)).font(.system(size: compact ? 13 : 14, weight: .semibold)).monospacedDigit().frame(width: 66, alignment: .trailing)
+                if group.appBundle != nil { AppQuitControl(group: group) }
+            }
+            .padding(.vertical, compact ? 6 : 12).contentShape(Rectangle())
+            .onTapGesture { if group.appBundle == nil { expanded.toggle() } }
+            if expanded {
+                VStack(spacing: 6) {
+                    ForEach(group.processes.prefix(12), id: \.pid) { process in
+                        HStack(spacing: 10) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(verbatim: "PID \(process.pid) · \(Bytes.mem(Int64(process.residentKB) * 1024))").font(.system(size: 12, weight: .medium))
+                                Text(process.commandLine).font(.system(size: 11, design: .monospaced)).foregroundStyle(Palette.muted)
+                                    .lineLimit(1).truncationMode(.middle).help(process.commandLine)
+                            }
+                            Spacer(minLength: 6)
+                            ProcessStopControl(process: process, name: group.name)
+                        }.padding(10).background(Color.white.opacity(0.035)).clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                }.padding(.leading, 24).padding(.bottom, 10)
+            }
+        }
+    }
+}
+
 struct MachineMenuSection: View {
     @EnvironmentObject var machine: MachineStore
     var body: some View {
@@ -46,20 +175,17 @@ struct MachineMenuSection: View {
             } else if machine.error == nil {
                 Text("Reading memory…").font(.system(size: 14)).foregroundStyle(Palette.muted)
             }
-            Text("LOCAL SERVERS").font(.system(size: 11, weight: .semibold)).tracking(1).foregroundStyle(Palette.muted)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(MachineCopy.serversTitle).font(.system(size: 11, weight: .semibold)).tracking(1).foregroundStyle(Palette.muted)
+                Text(MachineCopy.serversCaption).font(.system(size: 11)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
+            }
             if machine.listeners.isEmpty {
-                Text("Nothing of yours is listening on a port.").font(.system(size: 13)).foregroundStyle(Palette.muted)
+                Text(MachineCopy.noServers).font(.system(size: 13)).foregroundStyle(Palette.muted)
             }
             ForEach(machine.listeners) { ListenerRow(listener: $0, compact: true) }
-            Text("HEAVIEST APPS").font(.system(size: 11, weight: .semibold)).tracking(1).foregroundStyle(Palette.muted)
-            VStack(spacing: 6) {
-                ForEach(machine.groups.prefix(5)) { group in
-                    HStack {
-                        Text(group.name).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                        Spacer()
-                        Text(Bytes.mem(group.residentBytes)).font(.system(size: 13)).monospacedDigit()
-                    }
-                }
+            Text(MachineCopy.heaviestTitle).font(.system(size: 11, weight: .semibold)).tracking(1).foregroundStyle(Palette.muted)
+            VStack(spacing: 0) {
+                ForEach(machine.groups.prefix(5)) { GroupRow(group: $0, compact: true) }
             }
         }
         .task { await machine.watch() }
@@ -90,37 +216,6 @@ struct LoadBar: View {
     }
 }
 
-struct ListenerRow: View {
-    @EnvironmentObject var machine: MachineStore
-    let listener: Listener
-    var compact = false
-    @ViewState private var confirming = false
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 7) {
-                    Text(listener.name).font(.system(size: compact ? 14 : 15, weight: .semibold)).lineLimit(1)
-                    ForEach(listener.ports, id: \.self) { Tag(text: ":\($0)", color: Palette.accent) }
-                }
-                Text(verbatim: compact ? "PID \(listener.pid)" : "PID \(listener.pid) · \(listener.command)")
-                    .font(.system(size: 11, design: compact ? .default : .monospaced)).foregroundStyle(Palette.muted).lineLimit(1).truncationMode(.middle)
-            }
-            Spacer(minLength: 8)
-            if machine.canForceStop(listener) {
-                Button("Force stop") { Task { await machine.stop(listener, force: true) } }.buttonStyle(ActionStyle(primary: true))
-            } else if machine.stopping[listener.pid] != nil {
-                ProgressView().controlSize(.small)
-            } else if confirming {
-                Button("Cancel") { confirming = false }.buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Palette.muted)
-                Button("Stop it") { confirming = false; Task { await machine.stop(listener) } }.buttonStyle(ActionStyle(primary: true))
-            } else {
-                Button("Stop") { confirming = true }.buttonStyle(ActionStyle()).disabled(machine.demo)
-            }
-        }.padding(12).background(Palette.surface).clipShape(RoundedRectangle(cornerRadius: 9))
-            .help(listener.addresses.joined(separator: ", "))
-    }
-}
-
 struct MachineDashboardView: View {
     @EnvironmentObject var machine: MachineStore
     @ViewState private var now = Date()
@@ -145,28 +240,22 @@ struct MachineDashboardView: View {
                                  caption: machine.system.diskTotalBytes.map { "of \(Bytes.gb($0))" } ?? "",
                                  fraction: diskFraction, color: Palette.mint)
                     }
-                    section("LOCAL SERVERS", trailing: "Your own processes listening on a TCP port") {
+                    section(MachineCopy.serversTitle, caption: MachineCopy.serversCaption) {
                         if machine.listeners.isEmpty {
-                            Text("Nothing of yours is listening on a port.").font(.system(size: 14)).foregroundStyle(Palette.muted)
+                            Text(MachineCopy.noServers).font(.system(size: 14)).foregroundStyle(Palette.muted)
                         }
                         ForEach(machine.listeners) { ListenerRow(listener: $0) }
                     }
-                    section("HEAVIEST APPS", trailing: "Resident memory, helpers counted with their app") {
+                    section(MachineCopy.heaviestTitle, caption: "Resident memory. An app's helpers count with the app; expand a tool to stop one of its processes.") {
                         VStack(spacing: 0) {
                             ForEach(machine.groups) { group in
-                                HStack {
-                                    Text(group.name).font(.system(size: 14, weight: .medium)).lineLimit(1)
-                                    Text(group.count == 1 ? "1 process" : "\(group.count) processes").font(.system(size: 12)).foregroundStyle(Palette.muted)
-                                    Spacer()
-                                    Text(String(format: "%.0f%% CPU", group.cpu)).font(.system(size: 13)).foregroundStyle(Palette.muted).monospacedDigit().frame(width: 90, alignment: .trailing)
-                                    Text(Bytes.mem(group.residentBytes)).font(.system(size: 14, weight: .semibold)).monospacedDigit().frame(width: 80, alignment: .trailing)
-                                }.padding(.horizontal, 18).padding(.vertical, 12)
+                                GroupRow(group: group).padding(.horizontal, 18)
                                 if group.id != machine.groups.last?.id { Rectangle().fill(Palette.border).frame(height: 1).padding(.horizontal, 18) }
                             }
                         }.background(Palette.surface).clipShape(RoundedRectangle(cornerRadius: 13))
                             .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(Palette.border))
                     }
-                    Text("Stop sends the process a normal quit signal (SIGTERM); Force stop appears if it is still listening a few seconds later. macOS services and apps are never listed.")
+                    Text("Quit asks an app to close the way ⌘Q does; Stop sends a process a normal quit signal (SIGTERM). Force quit and Force stop appear if it is still running a few seconds later. macOS itself is never offered.")
                         .font(.system(size: 13)).foregroundStyle(Palette.muted)
                 }.padding(30)
             }
@@ -224,12 +313,11 @@ struct MachineDashboardView: View {
             .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(Palette.border))
     }
 
-    func section<Content: View>(_ title: String, trailing: String, @ViewBuilder content: () -> Content) -> some View {
+    func section<Content: View>(_ title: String, caption: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(title).font(.system(size: 12, weight: .semibold)).tracking(1.5).foregroundStyle(Palette.muted)
-                Spacer()
-                Text(trailing).font(.system(size: 12)).foregroundStyle(Palette.muted)
+                Text(caption).font(.system(size: 13)).foregroundStyle(Palette.muted)
             }
             content()
         }

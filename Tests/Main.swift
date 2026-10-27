@@ -7,5 +7,6 @@ import Foundation
         try await VPNTests.run()
         try await MachineTests.run()
         try await AWSTests.run()
+        try await CLILoginTests.run()
     }
 }

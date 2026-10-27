@@ -1,6 +1,7 @@
 # Mac load
 
-Shows whether this Mac has room for heavy local work, and what is using it.
+Shows whether this Mac has room for heavy local work and what is using it, and stops what you no
+longer need.
 
 ## What it reads
 
@@ -10,29 +11,47 @@ While its page or menu-bar tab is on screen it reads every 10 seconds (and on **
   under 20% **Wait before heavy runs**, 20–24% **One heavy run at a time**, 25% and up **Fine to push**
   (the thresholds are `LoadVerdict.waitBelow` / `pushFrom`).
 - **Swap used** (`vm.swapusage`), **disk free** on `/` (the capacity macOS reports for important use), RAM.
-- **Heaviest apps**: `ps -axo pid=,rss=,%cpu=,comm=` grouped by app, so an app's helper processes count
-  with the outermost `.app` and other processes by executable name. Resident memory overstates shared
-  pages, so read it as a ranking, not an exact footprint.
-- **Local servers**: `lsof -nP -iTCP -sTCP:LISTEN` without sudo lists only your own processes. macOS
-  services (`/System`, `/usr/libexec`, `/usr/sbin`, `/usr/bin`, `/bin`, `/sbin`) and anything inside an
-  `.app` bundle are left out, so the list is the dev servers, databases and tools you started.
+- **Processes**: `ps -axo pid=,ppid=,uid=,rss=,%cpu=,args=`, with each process's real executable from
+  `proc_pidpath` (a process can rename itself in its command line).
+- **Listening ports**: `lsof -nP -iTCP -sTCP:LISTEN`, which without sudo lists only your own processes.
 
-## Stopping a server
+## Who owns a process
 
-**Stop** asks for a second click, re-reads the PID's command (a PID reused since the last refresh is never
-signalled), then sends SIGTERM. If the process is still listening `MachineStore.forceAfter` seconds later,
-**Force stop** sends SIGKILL. A process a launchd service keeps alive (e.g. `brew services`) comes back;
-stop that one with its own command.
+A process belongs to the app it runs from (an app's helpers count with the outermost `.app`), or to the
+app that launched it before any shell did: walking up its parents, an app reached before a shell (`zsh`,
+`bash`, `login`, `tmux`, …) owns it, so Raycast's node backend belongs to Raycast. A process started
+from a terminal reaches the shell first and belongs to no app; its group is named by the command it was
+started as (`claude`, `node`), not by a versioned binary.
+
+- **Local servers** are your own listeners that belong to no app and are not macOS services: the dev
+  servers, databases and tools you started. Stop them when you are done to free memory.
+- **Heaviest apps & processes** are the top groups by resident memory (it overstates shared pages, so
+  read it as a ranking). Apps have **Quit**; a command-line tool expands into its processes, each with
+  **Stop**. Groups made only of macOS processes are tagged **macOS** and have no actions.
+
+## Quitting and stopping
+
+Every action asks for a second click.
+
+- **Quit** asks the app to close the way ⌘Q does (`NSRunningApplication.terminate`), so it can save or
+  ask first. Still running `MachineStore.forceAfter` seconds later, **Force quit** ends it.
+- **Stop** re-reads the PID's command line (a PID reused since the last refresh is never signalled), then
+  sends SIGTERM. Still running after the same grace period, **Force stop** sends SIGKILL.
+- Only your own processes outside the system paths (`/System`, `/usr/libexec`, `/usr/sbin`, `/usr/bin`,
+  `/bin`, `/sbin`, `/Library/Apple`, `/private/var`) can be stopped, never one whose executable is
+  unknown, and never DevTools itself. Apps under `/System` cannot be quit.
+- Stopping a `claude` process ends that Claude Code session. A process a launchd service keeps alive
+  (e.g. `brew services`) comes back; stop that one with its own command.
 
 ## Demo
 
-`--demo` shows sample readings and two sample servers; nothing is read or signalled.
+`--demo` shows sample readings, servers and apps; nothing is read, stopped or quit.
 
 ## Source map
 
 All under `Sources/Tools/Machine/`:
 
-- `Machine.swift`: verdict thresholds, `memory_pressure` / `ps` / `lsof` parsing, app grouping, system reading.
-- `MachineStore.swift`: polling while visible, refresh, stop / force stop.
+- `Machine.swift`: verdict thresholds, parsing, ownership and grouping, what may be signalled or quit.
+- `MachineStore.swift`: polling while visible, refresh, stop / force stop, quit / force quit.
 - `MachineViews.swift`: menu-bar section and dashboard page.
-- `Tests/MachineTests.swift`: parsing against real output shapes, verdict boundaries, stop flows against a fake signal.
+- `Tests/MachineTests.swift`: parsing against real output shapes, ownership, stop and quit flows against fakes.

@@ -10,6 +10,6 @@ swiftc -swift-version 5 -parse-as-library -module-cache-path "$BUILD/ModuleCache
   "$ROOT/Sources/Tools/CSWAP/CLI.swift" "$ROOT/Sources/Tools/CSWAP/Store.swift" \
   "$ROOT/Sources/Tools/VPN/VPN.swift" "$ROOT/Sources/Tools/VPN/VPNStore.swift" \
   "$ROOT/Sources/Tools/Machine/Machine.swift" "$ROOT/Sources/Tools/Machine/MachineStore.swift" \
-  "$ROOT/Sources/Tools/AWS/AWS.swift" "$ROOT/Sources/Tools/AWS/AWSStore.swift" \
+  "$ROOT/Sources/Tools/Logins/AWS.swift" "$ROOT/Sources/Tools/Logins/AWSStore.swift" "$ROOT/Sources/Tools/Logins/CLILogins.swift" \
   "$ROOT"/Tests/*.swift -o "$BUILD/tests"
 "$BUILD/tests"

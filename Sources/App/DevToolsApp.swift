@@ -8,10 +8,11 @@ struct DevToolsApp: App {
     @StateObject private var vpn = VPNStore()
     @StateObject private var machine = MachineStore()
     @StateObject private var aws = AWSStore()
+    @StateObject private var cli = CLILoginStore()
     @AppStorage("selectedTool") private var selected: Tool = .cswap
     var body: some Scene {
         Window("DevTools", id: "dashboard") {
-            ShellView().environmentObject(cswap).environmentObject(vpn).environmentObject(machine).environmentObject(aws)
+            ShellView().environmentObject(cswap).environmentObject(vpn).environmentObject(machine).environmentObject(aws).environmentObject(cli)
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 1090, minHeight: 720)
         }
@@ -29,7 +30,7 @@ struct DevToolsApp: App {
                     case .cswap: Task { await cswap.refresh() }
                     case .vpn: Task { await vpn.refresh() }
                     case .machine: Task { await machine.refresh() }
-                    case .aws: Task { await aws.refresh() }
+                    case .logins: Task { await aws.refresh() }; Task { await cli.refresh() }
                     }
                 }
                 .keyboardShortcut("r")
@@ -38,7 +39,7 @@ struct DevToolsApp: App {
         }
         MenuBarExtra("DevTools", systemImage: "wrench.and.screwdriver") {
             TimelineView(.periodic(from: .now, by: 15)) { _ in
-                MenuBarPanel().environmentObject(cswap).environmentObject(vpn).environmentObject(machine).environmentObject(aws)
+                MenuBarPanel().environmentObject(cswap).environmentObject(vpn).environmentObject(machine).environmentObject(aws).environmentObject(cli)
                     .preferredColorScheme(.dark)
             }
         }
@@ -50,7 +51,7 @@ struct DevToolsApp: App {
         case .cswap: cswap.busy || !cswap.connected || cswap.accountReview != nil
         case .vpn: vpn.busy
         case .machine: machine.busy
-        case .aws: aws.busy
+        case .logins: aws.busy || cli.checking
         }
     }
 }

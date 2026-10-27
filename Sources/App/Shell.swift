@@ -3,14 +3,14 @@ import AppKit
 
 // Every tool gets a case here, a full page in ShellView and a section in MenuBarPanel.
 enum Tool: String, CaseIterable, Identifiable {
-    case cswap, vpn, machine, aws
+    case cswap, vpn, machine, logins
     var id: String { rawValue }
     var title: String {
         switch self {
         case .cswap: "CSWAP"
         case .vpn: "VPN"
         case .machine: "Mac"
-        case .aws: "AWS"
+        case .logins: "Logins"
         }
     }
     var icon: String {
@@ -18,7 +18,7 @@ enum Tool: String, CaseIterable, Identifiable {
         case .cswap: "arrow.left.arrow.right"
         case .vpn: "lock.shield"
         case .machine: "memorychip"
-        case .aws: "cloud"
+        case .logins: "key"
         }
     }
 }
@@ -32,7 +32,7 @@ struct ShellView: View {
             case .cswap: DashboardView()
             case .vpn: VPNDashboardView()
             case .machine: MachineDashboardView()
-            case .aws: AWSDashboardView()
+            case .logins: LoginsDashboardView()
             }
         }.background(Palette.background)
     }
@@ -68,6 +68,7 @@ struct MenuBarPanel: View {
     @EnvironmentObject var cswap: DashboardStore
     @EnvironmentObject var vpn: VPNStore
     @EnvironmentObject var aws: AWSStore
+    @EnvironmentObject var cli: CLILoginStore
     @AppStorage("selectedTool") private var selected: Tool = .cswap
     @Environment(\.openWindow) private var openWindow
     var body: some View {
@@ -77,7 +78,7 @@ struct MenuBarPanel: View {
                     Label("DevTools", systemImage: "wrench.and.screwdriver")
                         .font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(Palette.accent)
                     Spacer()
-                    if cswap.busy || vpn.busy || aws.busy { ProgressView().controlSize(.small) }
+                    if cswap.busy || vpn.busy || aws.busy || cli.checking { ProgressView().controlSize(.small) }
                 }
                 Picker("Tool", selection: $selected) {
                     ForEach(Tool.allCases) { Text($0.title).tag($0) }
@@ -90,7 +91,7 @@ struct MenuBarPanel: View {
                     case .cswap: CSWAPMenuSection(showDashboard: showDashboard)
                     case .vpn: VPNMenuSection()
                     case .machine: MachineMenuSection()
-                    case .aws: AWSMenuSection()
+                    case .logins: LoginsMenuSection()
                     }
                 }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
             }.frame(maxHeight: 540)

@@ -10,10 +10,11 @@ never replaces them, stores their credentials, or talks to a server of its own.
   [`claude-swap`](https://github.com/realiti4/claude-swap) (`cswap`). See [docs/cswap.md](docs/cswap.md).
 - **VPN**: status, connect and disconnect for the tunnels of the `darwin-vpn` script, with the
   macOS password prompt instead of a terminal `sudo`. See [docs/vpn.md](docs/vpn.md).
-- **Mac**: free memory with a "fine to push / one heavy run / wait" verdict, swap, disk, the heaviest
-  apps, and your own local servers listening on a port, with Stop. See [docs/mac-load.md](docs/mac-load.md).
-- **AWS**: SSO profiles from `~/.aws/config` grouped by session, signed-in status from STS, and a
-  browser login per session. See [docs/aws.md](docs/aws.md).
+- **Mac**: free memory with a "fine to push / one heavy run / wait" verdict, swap, disk, your own local
+  servers listening on a port, and the heaviest apps and processes, with Quit and Stop. See
+  [docs/mac-load.md](docs/mac-load.md).
+- **Logins**: who AWS SSO profiles, GitHub and Google Cloud are signed in as, with a login for each.
+  See [docs/logins.md](docs/logins.md).
 
 ## Build and install
 
