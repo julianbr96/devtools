@@ -1,7 +1,5 @@
 import SwiftUI
 
-typealias CommandRunner = @Sendable (String, [String], TimeInterval) async throws -> CommandOutput
-
 @MainActor
 final class DashboardStore: ObservableObject {
     @Published private(set) var localArchive = LocalArchive()
@@ -115,7 +113,7 @@ final class DashboardStore: ObservableObject {
     private func loadSnapshot() async throws -> AccountsResponse {
         let result: AccountsResponse
         if demo {
-            guard let url = Bundle.main.url(forResource: "demo", withExtension: "json") else {
+            guard let url = Bundle.main.url(forResource: "cswap-demo", withExtension: "json") else {
                 throw DashboardError.message("Demo fixture missing.")
             }
             result = try AccountsResponse.decodeDemo(Data(contentsOf: url))

@@ -4,34 +4,44 @@ import Darwin
 struct CommandOutput: Sendable {
     let data: Data
     let stderr: String
+    var status: Int32 = 0
 }
 
-enum CLI {
-    static func discover() -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let candidates = ["\(home)/.local/bin/cswap", "/opt/homebrew/bin/cswap", "/usr/local/bin/cswap"]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? candidates[0]
-    }
+typealias CommandRunner = @Sendable (String, [String], TimeInterval) async throws -> CommandOutput
 
-    // No shell, credential-file parsing, analytics, web server, or output logs.
-    static func run(path: String, arguments: [String], timeout: TimeInterval = 120) async throws -> CommandOutput {
+enum ProcessFailure: LocalizedError {
+    case notExecutable
+    case timedOut
+    case streamLeftOpen
+    var errorDescription: String? {
+        switch self {
+        case .notExecutable: "The executable was not found at the selected path."
+        case .timedOut: "The command took too long and was stopped."
+        case .streamLeftOpen: "The command left an output stream open."
+        }
+    }
+}
+
+// Runs an executable with an argument array and returns its exit status; each tool decides what
+// a nonzero status means. No shell, credential-file parsing, analytics, web server, or output logs.
+enum ProcessRunner {
+    static let searchPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+    static func run(path: String, arguments: [String], timeout: TimeInterval = 120, environment: [String: String] = [:]) async throws -> CommandOutput {
         try await Task.detached(priority: .userInitiated) {
-            try blockingRun(path: path, arguments: arguments, timeout: timeout)
+            try blockingRun(path: path, arguments: arguments, timeout: timeout, environment: environment)
         }.value
     }
 
-    static func blockingRun(path: String, arguments: [String], timeout: TimeInterval) throws -> CommandOutput {
-        guard path.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: path) else {
-            throw DashboardError.message("CSWAP was not found at the selected path. Choose the cswap executable in Settings.")
-        }
+    static func blockingRun(path: String, arguments: [String], timeout: TimeInterval, environment: [String: String]) throws -> CommandOutput {
+        guard path.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: path) else { throw ProcessFailure.notExecutable }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = arguments
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         var env = ProcessInfo.processInfo.environment
-        env["PATH"] = "\(home)/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:" + (env["PATH"] ?? "")
-        env["NO_COLOR"] = "1"
-        env["PYTHONUNBUFFERED"] = "1"
+        env["PATH"] = "\(home)/.local/bin:\(searchPath):" + (env["PATH"] ?? "")
+        env.merge(environment) { $1 }
         process.environment = env
         process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
         process.standardInput = FileHandle.nullDevice // Never answer a hidden confirmation prompt.
@@ -51,16 +61,9 @@ enum CLI {
                 _ = finished.wait(timeout: .now() + 3)
             }
         }
-        let data = try out.result(), errorText = redact(String(decoding: try err.result(), as: UTF8.self))
-        if didTimeout {
-            throw DashboardError.message("CSWAP took too long. Unlock Keychain if prompted, then refresh. A write may have completed; check the active account before retrying.")
-        }
-        if process.terminationStatus != 0 {
-            try checkEnvelope(data)
-            let safeOutput = redact(String(decoding: data, as: UTF8.self))
-            throw DashboardError.message(errorText.isEmpty ? (safeOutput.isEmpty ? "CSWAP exited with code \(process.terminationStatus)." : safeOutput) : errorText)
-        }
-        return CommandOutput(data: data, stderr: errorText)
+        let data = try out.result(), errorData = try err.result()
+        if didTimeout { throw ProcessFailure.timedOut }
+        return CommandOutput(data: data, stderr: String(decoding: errorData, as: UTF8.self), status: process.terminationStatus)
     }
 }
 
@@ -78,9 +81,7 @@ private final class DataCollector: @unchecked Sendable {
     func result() throws -> Data {
         // A descendant can inherit a pipe even after the CLI exits. Never let
         // that keep the UI busy forever; the reader owns its data until EOF.
-        guard completed.wait(timeout: .now() + 3) == .success else {
-            throw DashboardError.message("CSWAP left an output stream open. Check the active account before retrying; a write may have completed.")
-        }
+        guard completed.wait(timeout: .now() + 3) == .success else { throw ProcessFailure.streamLeftOpen }
         return data
     }
 }

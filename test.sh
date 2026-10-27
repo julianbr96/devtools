@@ -1,8 +1,13 @@
 #!/bin/bash
+# Compiles the non-UI sources with the tests into one binary and runs it.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-BUILD="$(mktemp -d "${TMPDIR:-/tmp}/cswap-test.XXXXXX")"
+BUILD="$(mktemp -d "${TMPDIR:-/tmp}/devtools-test.XXXXXX")"
 trap 'rm -rf "$BUILD"' EXIT
 swiftc -swift-version 5 -parse-as-library -module-cache-path "$BUILD/ModuleCache" \
-  "$ROOT/Sources/LocalData.swift" "$ROOT/Sources/Models.swift" "$ROOT/Sources/CLI.swift" "$ROOT/Sources/Store.swift" "$ROOT/Tests/CoreTests.swift" -o "$BUILD/tests"
+  "$ROOT/Sources/Core/ProcessRunner.swift" "$ROOT/Sources/Core/DashboardError.swift" \
+  "$ROOT/Sources/Tools/CSWAP/LocalData.swift" "$ROOT/Sources/Tools/CSWAP/Models.swift" \
+  "$ROOT/Sources/Tools/CSWAP/CLI.swift" "$ROOT/Sources/Tools/CSWAP/Store.swift" \
+  "$ROOT/Sources/Tools/VPN/VPN.swift" "$ROOT/Sources/Tools/VPN/VPNStore.swift" \
+  "$ROOT"/Tests/*.swift -o "$BUILD/tests"
 "$BUILD/tests"

@@ -1,94 +1,13 @@
 import SwiftUI
 import AppKit
-
-enum Palette {
-    static let background = Color(red: 0.055, green: 0.067, blue: 0.083)
-    static let sidebar = Color(red: 0.074, green: 0.087, blue: 0.106)
-    static let surface = Color(red: 0.091, green: 0.106, blue: 0.125)
-    static let border = Color.white.opacity(0.09)
-    static let accent = Color(red: 0.94, green: 0.62, blue: 0.47)
-    static let mint = Color(red: 0.48, green: 0.84, blue: 0.70)
-    static let muted = Color(red: 0.62, green: 0.66, blue: 0.72)
-    static func quota(_ remaining: Double?) -> Color {
-        guard let remaining else { return muted }
-        return remaining <= 10 ? .red.opacity(0.85) : remaining <= 30 ? .orange : mint
-    }
-}
-
-struct ActionStyle: ButtonStyle {
-    var primary = false
-    @Environment(\.isEnabled) private var isEnabled
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(.system(size: 14, weight: .semibold))
-            .padding(.horizontal, 15).padding(.vertical, 10)
-            .foregroundStyle(primary ? Palette.background : Color.white.opacity(0.9))
-            .background(primary ? Palette.accent : Color.white.opacity(configuration.isPressed ? 0.13 : 0.055))
-            .clipShape(RoundedRectangle(cornerRadius: 9))
-            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(primary ? Color.clear : Palette.border))
-            .opacity(!isEnabled ? 0.4 : configuration.isPressed ? 0.72 : 1)
-    }
-}
-
-struct Tag: View {
-    let text: String
-    var color: Color = Palette.muted
-    var body: some View {
-        Text(text).font(.system(size: 12, weight: .semibold)).foregroundStyle(color)
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(color.opacity(0.1)).clipShape(RoundedRectangle(cornerRadius: 5))
-    }
-}
-
-@main
-struct CSWAPDesktopApp: App {
-    @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    @StateObject private var store = DashboardStore(localDataURL: LocalDataFile.defaultURL)
-    var body: some Scene {
-        Window("CSWAP", id: "dashboard") {
-            DashboardView().environmentObject(store)
-                .preferredColorScheme(.dark)
-                .frame(minWidth: 1020, minHeight: 720)
-        }
-        .defaultSize(width: 1240, height: 820)
-        .windowStyle(.hiddenTitleBar)
-        .commands {
-            CommandGroup(replacing: .newItem) { }
-            CommandGroup(replacing: .appTermination) {
-                Button("Quit CSWAP") { NSApp.terminate(nil) }
-                    .keyboardShortcut("q").disabled(store.busy)
-            }
-            CommandGroup(after: .toolbar) {
-                Button("Refresh accounts") { Task { await store.refresh() } }
-                    .keyboardShortcut("r").disabled(store.busy || !store.connected || store.accountReview != nil)
-            }
-        }
-        MenuBarExtra("CSWAP", systemImage: "arrow.left.arrow.right") {
-            TimelineView(.periodic(from: .now, by: 15)) { _ in
-                MenuBarPanel().environmentObject(store).preferredColorScheme(.dark)
-            }
-        }
-        .menuBarExtraStyle(.window)
-    }
-}
-
-class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationWillFinishLaunching(_ notification: Notification) {
-        // Keep dashboard windows without adding a Dock / Command-Tab entry.
-        // LSUIElement also applies this policy before startup to avoid a Dock flash.
-        NSApp.setActivationPolicy(.accessory)
-    }
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.activate(ignoringOtherApps: true)
-    }
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
-}
+import Combine
 
 struct DashboardView: View {
     @EnvironmentObject var store: DashboardStore
-    @State private var showSettings = false
-    @State private var showAdd = false
-    @State private var styleTarget: Account?
-    @State private var now = Date()
+    @ViewState private var showSettings = false
+    @ViewState private var showAdd = false
+    @ViewState private var styleTarget: Account?
+    @ViewState private var now = Date()
     let clock = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
     var body: some View {
         HStack(spacing: 0) {
@@ -389,18 +308,14 @@ struct DashboardView: View {
             .overlay(RoundedRectangle(cornerRadius: 17).strokeBorder(Palette.border)).padding(.top, 15)
     }
     func banner(_ text: String, icon: String, color: Color) -> some View {
-        HStack(alignment: .top, spacing: 11) {
-            Image(systemName: icon).foregroundStyle(color).padding(.top, 2)
-            Text(text).font(.system(size: 14)).lineSpacing(3).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-        }.padding(15).background(color.opacity(0.065)).clipShape(RoundedRectangle(cornerRadius: 9))
-            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(color.opacity(0.17)))
+        Banner(text: text, icon: icon, color: color)
     }
 }
 
 struct SettingsSheet: View {
     @EnvironmentObject var store: DashboardStore
     @Environment(\.dismiss) var dismiss
-    @State private var path = ""
+    @ViewState private var path = ""
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Local settings").font(.system(size: 25, weight: .semibold))
@@ -415,8 +330,8 @@ struct SettingsSheet: View {
                 }.buttonStyle(ActionStyle())
                 Text("Only choose a trusted CSWAP executable; it will run with your Mac user’s permissions.").font(.system(size: 13)).foregroundStyle(Palette.muted)
             }
-            Toggle("Refresh accounts every minute while CSWAP is running", isOn: $store.autoRefresh).font(.system(size: 14))
-            Text("Off by default on each launch. Use Refresh or ⌘R whenever you need an update. Closing the dashboard leaves CSWAP in the menu bar; choose Quit CSWAP to stop it.")
+            Toggle("Refresh accounts every minute while DevTools is running", isOn: $store.autoRefresh).font(.system(size: 14))
+            Text("Off by default on each launch. Use Refresh or ⌘R whenever you need an update. Closing the dashboard leaves DevTools in the menu bar; choose Quit DevTools to stop it.")
                 .font(.system(size: 13)).foregroundStyle(Palette.muted)
             Text("CSWAP controls quota caching and network backoff. Local-only means no app backend or telemetry—not offline quota checks. Switching still uses CSWAP’s credential and Keychain handling.")
                 .font(.system(size: 14)).foregroundStyle(Palette.muted).lineSpacing(4)
@@ -437,7 +352,7 @@ struct SettingsSheet: View {
 struct AddAccountSheet: View {
     @EnvironmentObject var store: DashboardStore
     @Environment(\.dismiss) var dismiss
-    @State private var alias = ""
+    @ViewState private var alias = ""
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Label("Add an account", systemImage: "person.crop.circle.badge.plus").font(.system(size: 25, weight: .semibold))

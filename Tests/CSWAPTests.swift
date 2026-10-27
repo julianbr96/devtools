@@ -1,9 +1,9 @@
 import Foundation
 import Darwin
 
-@main struct CoreTests {
+enum CSWAPTests {
     @MainActor
-    static func main() async throws {
+    static func run() async throws {
         var count = 0
         func check(_ condition: @autoclosure () throws -> Bool, _ name: String) rethrows {
             guard try condition() else { fatalError("FAIL: \(name)") }
