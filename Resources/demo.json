@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "activeAccountNumber": 1,
+  "accounts": [
+    {
+      "number": 1,
+      "alias": "Personal",
+      "email": "personal@example.com",
+      "organizationName": "",
+      "organizationUuid": "",
+      "active": true,
+      "usageStatus": "ok",
+      "usage": {
+        "fiveHour": {
+          "pct": 28,
+          "resetsAt": "2026-09-11T22:18:32.226Z"
+        },
+        "sevenDay": {
+          "pct": 43,
+          "resetsAt": "2026-09-14T01:28:32.226Z"
+        }
+      },
+      "usageFetchedAt": "2026-09-11T19:28:32.226Z",
+      "usageAgeSeconds": 0
+    },
+    {
+      "number": 2,
+      "alias": "Work",
+      "email": "work@example.com",
+      "organizationName": "Studio team",
+      "organizationUuid": "demo-org",
+      "active": false,
+      "usageStatus": "ok",
+      "usage": {
+        "fiveHour": {
+          "pct": 7,
+          "resetsAt": "2026-09-11T22:38:32.226Z"
+        },
+        "sevenDay": {
+          "pct": 18,
+          "resetsAt": "2026-09-14T13:28:32.226Z"
+        }
+      },
+      "usageFetchedAt": "2026-09-11T19:27:32.226Z",
+      "usageAgeSeconds": 60
+    },
+    {
+      "number": 3,
+      "alias": "Research",
+      "email": "research@example.com",
+      "organizationName": "",
+      "organizationUuid": "",
+      "active": false,
+      "usageStatus": "ok",
+      "usage": {
+        "fiveHour": {
+          "pct": 94,
+          "resetsAt": "2026-09-11T22:58:32.226Z"
+        },
+        "sevenDay": {
+          "pct": 87,
+          "resetsAt": "2026-09-15T01:28:32.226Z"
+        }
+      },
+      "usageFetchedAt": "2026-09-11T19:26:32.226Z",
+      "usageAgeSeconds": 120
+    },
+    {
+      "number": 4,
+      "alias": "Archive",
+      "email": "archive@example.com",
+      "organizationName": "",
+      "organizationUuid": "",
+      "active": false,
+      "usageStatus": "relogin_required",
+      "usage": null,
+      "disabled": true,
+      "lastGoodUsage": {
+        "fiveHour": {
+          "pct": 55,
+          "resetsAt": "2026-09-11T18:28:32.226Z"
+        },
+        "sevenDay": {
+          "pct": 72,
+          "resetsAt": "2026-09-14T01:28:32.226Z"
+        }
+      },
+      "lastGoodFetchedAt": "2026-09-11T16:28:32.226Z",
+      "lastGoodAgeSeconds": 10800
+    }
+  ]
+}
