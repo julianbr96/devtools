@@ -1,10 +1,5 @@
 import Foundation
 
-enum DashboardError: LocalizedError {
-    case message(String)
-    var errorDescription: String? { if case .message(let text) = self { return text }; return nil }
-}
-
 enum Dates {
     static func parse(_ value: String?) -> Date? {
         guard let value else { return nil }

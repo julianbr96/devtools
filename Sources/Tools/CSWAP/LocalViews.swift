@@ -35,8 +35,8 @@ struct AccountStyleSheet: View {
     @EnvironmentObject var store: DashboardStore
     @Environment(\.dismiss) private var dismiss
     let account: Account
-    @State private var nickname = ""
-    @State private var color: AccountColor = .peach
+    @ViewState private var nickname = ""
+    @ViewState private var color: AccountColor = .peach
     private var previewName: String {
         let value = nickname.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.isEmpty ? account.title : value
@@ -96,7 +96,7 @@ struct AccountStyleSheet: View {
 struct SwitchHistorySheet: View {
     @EnvironmentObject var store: DashboardStore
     @Environment(\.dismiss) private var dismiss
-    @State private var confirmClear = false
+    @ViewState private var confirmClear = false
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {

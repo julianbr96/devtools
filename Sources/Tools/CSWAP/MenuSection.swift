@@ -1,53 +1,37 @@
 import SwiftUI
-import AppKit
 
-struct MenuBarPanel: View {
+struct CSWAPMenuSection: View {
     @EnvironmentObject var store: DashboardStore
-    @Environment(\.openWindow) private var openWindow
+    let showDashboard: () -> Void
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Label("CSWAP", systemImage: "arrow.left.arrow.right")
-                    .font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(Palette.accent)
-                Spacer()
-                if store.busy { ProgressView().controlSize(.small) }
                 Tag(text: store.demo ? "Sample data" : store.autoRefresh ? "Auto-refresh on" : "Manual refresh")
-            }.padding(18)
-            Divider().overlay(Palette.border)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    if let review = store.accountReview, store.reviewLocation == .menuBar {
-                        AccountReviewView(review: review, compact: true)
-                    } else {
-                        LocalDataWarning()
-                        if let error = store.error { Text(error).font(.system(size: 12)).foregroundStyle(.orange).textSelection(.enabled) }
-                        if let notice = store.notice {
-                            VStack(alignment: .leading, spacing: 7) {
-                                Text(notice).font(.system(size: 12)).foregroundStyle(Palette.mint)
-                                Button("Dismiss") { store.notice = nil }.buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Palette.muted)
-                            }
-                        }
-                        if store.connected { connectedContent }
-                        else {
-                            Text("Your accounts, one click away.").font(.system(size: 24, weight: .semibold, design: .rounded))
-                            Text("Open the dashboard to connect your existing CSWAP installation. Nothing is checked until you connect.")
-                                .font(.system(size: 14)).foregroundStyle(Palette.muted)
-                            Button("Open dashboard to connect", action: showDashboard).buttonStyle(ActionStyle(primary: true))
-                        }
-                    }
-                }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
-            }.frame(maxHeight: 540)
-            Divider().overlay(Palette.border)
-            HStack {
-                Button("Open dashboard", action: showDashboard).buttonStyle(.plain)
                 Spacer()
                 Button("History") { showDashboard(); store.showHistory = true }
-                    .buttonStyle(.plain).disabled(store.accountReview != nil)
-                Spacer()
-                Button("Quit CSWAP") { NSApp.terminate(nil) }.buttonStyle(.plain).disabled(store.busy)
-            }.font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.muted).padding(18)
-        }.frame(width: 420).fixedSize(horizontal: false, vertical: true)
-            .background(Palette.background).foregroundStyle(.white).tint(Palette.accent)
+                    .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.muted)
+                    .disabled(store.accountReview != nil)
+            }
+            if let review = store.accountReview, store.reviewLocation == .menuBar {
+                AccountReviewView(review: review, compact: true)
+            } else {
+                LocalDataWarning()
+                if let error = store.error { Text(error).font(.system(size: 12)).foregroundStyle(.orange).textSelection(.enabled) }
+                if let notice = store.notice {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(notice).font(.system(size: 12)).foregroundStyle(Palette.mint)
+                        Button("Dismiss") { store.notice = nil }.buttonStyle(.plain).font(.system(size: 12)).foregroundStyle(Palette.muted)
+                    }
+                }
+                if store.connected { connectedContent }
+                else {
+                    Text("Your accounts, one click away.").font(.system(size: 24, weight: .semibold, design: .rounded))
+                    Text("Open the dashboard to connect your existing CSWAP installation. Nothing is checked until you connect.")
+                        .font(.system(size: 14)).foregroundStyle(Palette.muted)
+                    Button("Open dashboard to connect", action: showDashboard).buttonStyle(ActionStyle(primary: true))
+                }
+            }
+        }
     }
 
     private var connectedContent: some View {
@@ -97,7 +81,7 @@ struct MenuBarPanel: View {
                 }.buttonStyle(.plain).disabled(account.active || store.busy || store.demo || store.failedRefresh || store.accountReview != nil)
                     .help(account.email)
             }
-            Text("Switches always ask for confirmation. Close the dashboard to keep menu-bar access; Quit stops CSWAP.")
+            Text("Switches always ask for confirmation. Close the dashboard to keep menu-bar access; Quit stops DevTools.")
                 .font(.system(size: 12)).foregroundStyle(Palette.muted)
         }
     }
@@ -111,11 +95,5 @@ struct MenuBarPanel: View {
             Text(old ? "last known remaining" : "remaining").font(.system(size: 10)).foregroundStyle(old ? .orange : Palette.muted)
             Text(window?.resetLabel() ?? "Not reported").font(.system(size: 10)).foregroundStyle(Palette.muted)
         }.frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func showDashboard() {
-        openWindow(id: "dashboard")
-        if store.accountReview != nil { store.reviewLocation = .dashboard }
-        NSApp.activate(ignoringOtherApps: true)
     }
 }

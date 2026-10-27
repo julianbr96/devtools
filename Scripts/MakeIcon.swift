@@ -11,23 +11,22 @@ for size in [16, 32, 128, 256, 512] {
         let inset = CGFloat(pixels) * 0.07
         NSColor(calibratedRed: 0.09, green: 0.105, blue: 0.13, alpha: 1).setFill()
         NSBezierPath(roundedRect: bounds.insetBy(dx: inset, dy: inset), xRadius: CGFloat(pixels) * 0.2, yRadius: CGFloat(pixels) * 0.2).fill()
-        NSColor(calibratedRed: 0.94, green: 0.62, blue: 0.47, alpha: 1).setStroke()
         let p = CGFloat(pixels)
-        let arrows = NSBezierPath()
-        arrows.lineWidth = p * 0.065
-        arrows.lineCapStyle = .round
-        arrows.lineJoinStyle = .round
-        arrows.move(to: NSPoint(x: p * 0.29, y: p * 0.63))
-        arrows.line(to: NSPoint(x: p * 0.71, y: p * 0.63))
-        arrows.move(to: NSPoint(x: p * 0.61, y: p * 0.73))
-        arrows.line(to: NSPoint(x: p * 0.71, y: p * 0.63))
-        arrows.line(to: NSPoint(x: p * 0.61, y: p * 0.53))
-        arrows.move(to: NSPoint(x: p * 0.71, y: p * 0.37))
-        arrows.line(to: NSPoint(x: p * 0.29, y: p * 0.37))
-        arrows.move(to: NSPoint(x: p * 0.39, y: p * 0.47))
-        arrows.line(to: NSPoint(x: p * 0.29, y: p * 0.37))
-        arrows.line(to: NSPoint(x: p * 0.39, y: p * 0.27))
-        arrows.stroke()
+        func stroke(_ color: NSColor, _ points: [(CGFloat, CGFloat)]) {
+            let path = NSBezierPath()
+            path.lineWidth = p * 0.065
+            path.lineCapStyle = .round
+            path.lineJoinStyle = .round
+            path.move(to: NSPoint(x: p * points[0].0, y: p * points[0].1))
+            for point in points.dropFirst() { path.line(to: NSPoint(x: p * point.0, y: p * point.1)) }
+            color.setStroke()
+            path.stroke()
+        }
+        // A "</>" glyph: peach brackets, mint slash.
+        let peach = NSColor(calibratedRed: 0.94, green: 0.62, blue: 0.47, alpha: 1)
+        stroke(peach, [(0.37, 0.68), (0.21, 0.50), (0.37, 0.32)])
+        stroke(peach, [(0.63, 0.68), (0.79, 0.50), (0.63, 0.32)])
+        stroke(NSColor(calibratedRed: 0.48, green: 0.84, blue: 0.70, alpha: 1), [(0.565, 0.74), (0.435, 0.26)])
         NSGraphicsContext.restoreGraphicsState()
         let name = "icon_\(size)x\(size)\(scale == 2 ? "@2x" : "").png"
         try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: directory).appendingPathComponent(name))
