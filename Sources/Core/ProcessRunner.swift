@@ -27,13 +27,14 @@ enum ProcessFailure: LocalizedError {
 enum ProcessRunner {
     static let searchPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-    static func run(path: String, arguments: [String], timeout: TimeInterval = 120, environment: [String: String] = [:]) async throws -> CommandOutput {
+    // `unsetting` removes inherited variables, e.g. credentials exported by the shell that launched the app.
+    static func run(path: String, arguments: [String], timeout: TimeInterval = 120, environment: [String: String] = [:], unsetting: [String] = []) async throws -> CommandOutput {
         try await Task.detached(priority: .userInitiated) {
-            try blockingRun(path: path, arguments: arguments, timeout: timeout, environment: environment)
+            try blockingRun(path: path, arguments: arguments, timeout: timeout, environment: environment, unsetting: unsetting)
         }.value
     }
 
-    static func blockingRun(path: String, arguments: [String], timeout: TimeInterval, environment: [String: String]) throws -> CommandOutput {
+    static func blockingRun(path: String, arguments: [String], timeout: TimeInterval, environment: [String: String], unsetting: [String] = []) throws -> CommandOutput {
         guard path.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: path) else { throw ProcessFailure.notExecutable }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
@@ -41,6 +42,7 @@ enum ProcessRunner {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = "\(home)/.local/bin:\(searchPath):" + (env["PATH"] ?? "")
+        for name in unsetting { env.removeValue(forKey: name) }
         env.merge(environment) { $1 }
         process.environment = env
         process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser

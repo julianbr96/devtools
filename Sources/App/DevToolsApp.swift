@@ -6,10 +6,12 @@ struct DevToolsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var cswap = DashboardStore(localDataURL: LocalDataFile.defaultURL)
     @StateObject private var vpn = VPNStore()
+    @StateObject private var machine = MachineStore()
+    @StateObject private var aws = AWSStore()
     @AppStorage("selectedTool") private var selected: Tool = .cswap
     var body: some Scene {
         Window("DevTools", id: "dashboard") {
-            ShellView().environmentObject(cswap).environmentObject(vpn)
+            ShellView().environmentObject(cswap).environmentObject(vpn).environmentObject(machine).environmentObject(aws)
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 1090, minHeight: 720)
         }
@@ -19,25 +21,37 @@ struct DevToolsApp: App {
             CommandGroup(replacing: .newItem) { }
             CommandGroup(replacing: .appTermination) {
                 Button("Quit DevTools") { NSApp.terminate(nil) }
-                    .keyboardShortcut("q").disabled(cswap.busy || vpn.busy)
+                    .keyboardShortcut("q").disabled(cswap.busy || vpn.busy || aws.loggingIn != nil)
             }
             CommandGroup(after: .toolbar) {
                 Button("Refresh \(selected.title)") {
                     switch selected {
                     case .cswap: Task { await cswap.refresh() }
                     case .vpn: Task { await vpn.refresh() }
+                    case .machine: Task { await machine.refresh() }
+                    case .aws: Task { await aws.refresh() }
                     }
                 }
                 .keyboardShortcut("r")
-                .disabled(selected == .cswap ? cswap.busy || !cswap.connected || cswap.accountReview != nil : vpn.busy)
+                .disabled(refreshDisabled)
             }
         }
         MenuBarExtra("DevTools", systemImage: "wrench.and.screwdriver") {
             TimelineView(.periodic(from: .now, by: 15)) { _ in
-                MenuBarPanel().environmentObject(cswap).environmentObject(vpn).preferredColorScheme(.dark)
+                MenuBarPanel().environmentObject(cswap).environmentObject(vpn).environmentObject(machine).environmentObject(aws)
+                    .preferredColorScheme(.dark)
             }
         }
         .menuBarExtraStyle(.window)
+    }
+
+    private var refreshDisabled: Bool {
+        switch selected {
+        case .cswap: cswap.busy || !cswap.connected || cswap.accountReview != nil
+        case .vpn: vpn.busy
+        case .machine: machine.busy
+        case .aws: aws.busy
+        }
     }
 }
 

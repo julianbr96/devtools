@@ -3,18 +3,22 @@ import AppKit
 
 // Every tool gets a case here, a full page in ShellView and a section in MenuBarPanel.
 enum Tool: String, CaseIterable, Identifiable {
-    case cswap, vpn
+    case cswap, vpn, machine, aws
     var id: String { rawValue }
     var title: String {
         switch self {
         case .cswap: "CSWAP"
         case .vpn: "VPN"
+        case .machine: "Mac"
+        case .aws: "AWS"
         }
     }
     var icon: String {
         switch self {
         case .cswap: "arrow.left.arrow.right"
         case .vpn: "lock.shield"
+        case .machine: "memorychip"
+        case .aws: "cloud"
         }
     }
 }
@@ -27,6 +31,8 @@ struct ShellView: View {
             switch selected {
             case .cswap: DashboardView()
             case .vpn: VPNDashboardView()
+            case .machine: MachineDashboardView()
+            case .aws: AWSDashboardView()
             }
         }.background(Palette.background)
     }
@@ -61,6 +67,7 @@ struct ToolRail: View {
 struct MenuBarPanel: View {
     @EnvironmentObject var cswap: DashboardStore
     @EnvironmentObject var vpn: VPNStore
+    @EnvironmentObject var aws: AWSStore
     @AppStorage("selectedTool") private var selected: Tool = .cswap
     @Environment(\.openWindow) private var openWindow
     var body: some View {
@@ -70,7 +77,7 @@ struct MenuBarPanel: View {
                     Label("DevTools", systemImage: "wrench.and.screwdriver")
                         .font(.system(size: 16, weight: .bold, design: .rounded)).foregroundStyle(Palette.accent)
                     Spacer()
-                    if cswap.busy || vpn.busy { ProgressView().controlSize(.small) }
+                    if cswap.busy || vpn.busy || aws.busy { ProgressView().controlSize(.small) }
                 }
                 Picker("Tool", selection: $selected) {
                     ForEach(Tool.allCases) { Text($0.title).tag($0) }
@@ -82,6 +89,8 @@ struct MenuBarPanel: View {
                     switch selected {
                     case .cswap: CSWAPMenuSection(showDashboard: showDashboard)
                     case .vpn: VPNMenuSection()
+                    case .machine: MachineMenuSection()
+                    case .aws: AWSMenuSection()
                     }
                 }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
             }.frame(maxHeight: 540)
@@ -89,7 +98,7 @@ struct MenuBarPanel: View {
             HStack {
                 Button("Open dashboard", action: showDashboard).buttonStyle(.plain)
                 Spacer()
-                Button("Quit DevTools") { NSApp.terminate(nil) }.buttonStyle(.plain).disabled(cswap.busy || vpn.busy)
+                Button("Quit DevTools") { NSApp.terminate(nil) }.buttonStyle(.plain).disabled(cswap.busy || vpn.busy || aws.loggingIn != nil)
             }.font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.muted).padding(18)
         }.frame(width: 420).fixedSize(horizontal: false, vertical: true)
             .background(Palette.background).foregroundStyle(.white).tint(Palette.accent)

@@ -5,5 +5,7 @@ import Foundation
     static func main() async throws {
         try await CSWAPTests.run()
         try await VPNTests.run()
+        try await MachineTests.run()
+        try await AWSTests.run()
     }
 }
