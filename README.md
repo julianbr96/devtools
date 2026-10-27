@@ -16,6 +16,22 @@ never replaces them, stores their credentials, or talks to a server of its own.
 - **Logins**: who AWS SSO profiles, GitHub and Google Cloud are signed in as, with a login for each.
   See [docs/logins.md](docs/logins.md).
 
+## Menu-bar icon
+
+The 🛠 wrench means nothing needs a look. It turns into an orange triangle for a warning and a red
+octagon for something critical; the panel lists why under the tabs:
+
+| Critical (red)                       | Warning (orange)                          |
+| ------------------------------------ | ----------------------------------------- |
+| Memory under 20% free                | Memory 20–24% free                        |
+| A VPN tunnel up but not answering    | A VPN tunnel that left DNS rules behind   |
+|                                      | GitHub signed out                         |
+
+A disconnected tunnel or a signed-out AWS profile or Google Cloud is normal and changes nothing. To
+keep the icon current with every view closed, memory is read every 30 seconds (`memory_pressure`
+only), VPN status every 30 seconds, and GitHub and Google Cloud logins every 30 minutes. The rules
+are `Attention.evaluate` in `Sources/App/Attention.swift`.
+
 ## Build and install
 
 Requires Apple's Command Line Tools (`swiftc`, `codesign`). No packages or network access.
@@ -23,7 +39,7 @@ Requires Apple's Command Line Tools (`swiftc`, `codesign`). No packages or netwo
 ```sh
 ./test.sh                                   # unit tests, fake commands only
 ./build.sh                                  # builds build/DevTools.app
-./build.sh --install                        # also copies it to /Applications (quit DevTools first)
+./build.sh --install                        # also replaces /Applications/DevTools.app and reopens it
 open -n build/DevTools.app --args --demo    # sample data, no CLI calls, actions disabled
 ```
 
@@ -41,6 +57,7 @@ dashboard** in the panel brings the window back; closing the window leaves DevTo
 3. Own the store as a `@StateObject` in `Sources/App/DevToolsApp.swift`, pass it as an environment
    object to both scenes, and add its branch to the ⌘R command.
 4. Add its non-UI sources to `test.sh` and its tests to `Tests/`, called from `Tests/Main.swift`.
+   If it has a state worth a glance, add it to `Attention.evaluate` so the menu-bar icon shows it.
 5. Document it in `docs/<name>.md` and list it above.
 
 In views, declare state with `@ViewState`, not `@State`: the macOS 27 SDK makes `@State` a macro

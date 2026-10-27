@@ -33,7 +33,7 @@ enum CLILoginTests {
         let fake = FixtureCLILogin()
         let opened = OpenLog()
         let store = CLILoginStore(demo: false, paths: [.github: "/usr/bin/true", .gcloud: "/usr/bin/true"], scriptDirectory: dir,
-                                  command: { path, args, _ in try await fake.run(path, args) }, openInTerminal: { opened.record($0) })
+                                  command: { path, args, _ in try await fake.run(path, args) }, openInTerminal: { opened.record($0) }, pollInterval: nil)
         await store.refresh()
         check(store.status(.github) == .signedIn(account: "octocat", role: nil) && store.status(.gcloud) == .expired && store.signedInCount == 1,
               "an active gcloud account whose token cannot refresh is signed out")
@@ -55,7 +55,7 @@ enum CLILoginTests {
         check(store.status(.gcloud) == .signedIn(account: "me@example.com", role: nil), "after a Terminal login the next look re-checks")
 
         let missing = CLILoginStore(demo: false, paths: [.github: dir.appendingPathComponent("gh").path, .gcloud: dir.appendingPathComponent("gcloud").path],
-                                    scriptDirectory: dir, command: { path, args, _ in try await fake.run(path, args) }, openInTerminal: { opened.record($0) })
+                                    scriptDirectory: dir, command: { path, args, _ in try await fake.run(path, args) }, openInTerminal: { opened.record($0) }, pollInterval: nil)
         let beforeMissing = await fake.calls.count
         await missing.refresh()
         missing.login(.github)
@@ -63,7 +63,7 @@ enum CLILoginTests {
         check(missing.status(.github) == .failed("gh is not installed") && afterMissing == beforeMissing && opened.urls.count == 1
               && missing.error?.contains("not installed") == true, "a missing CLI runs and opens nothing")
 
-        let demo = CLILoginStore(demo: true, scriptDirectory: dir, command: { path, args, _ in try await fake.run(path, args) }, openInTerminal: { opened.record($0) })
+        let demo = CLILoginStore(demo: true, scriptDirectory: dir, command: { path, args, _ in try await fake.run(path, args) }, openInTerminal: { opened.record($0) }, pollInterval: nil)
         await demo.refresh()
         demo.login(.github)
         check(demo.signedInCount == 1 && opened.urls.count == 1, "demo runs and opens nothing")

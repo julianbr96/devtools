@@ -21,6 +21,7 @@ final class MachineStore: ObservableObject {
     private let readSystem: @Sendable () -> SystemReading
     private let executablePath: @Sendable (Int32) -> String?
     private let settle: Duration
+    private var memoryTask: Task<Void, Never>?
     static let forceAfter: TimeInterval = 4
 
     init(demo: Bool? = nil,
@@ -29,7 +30,8 @@ final class MachineStore: ObservableObject {
          quitApp: @escaping @MainActor (String, Bool) -> Bool = MachineStore.quitRunningApp,
          readSystem: @escaping @Sendable () -> SystemReading = { SystemReading.current() },
          executablePath: @escaping @Sendable (Int32) -> String? = { SystemReading.executablePath($0) },
-         settle: Duration = .milliseconds(800)) {
+         settle: Duration = .milliseconds(800),
+         memoryPollInterval: Duration? = .seconds(30)) {
         self.demo = demo ?? CommandLine.arguments.contains("--demo")
         self.command = command
         self.signal = signal
@@ -38,6 +40,22 @@ final class MachineStore: ObservableObject {
         self.executablePath = executablePath
         self.settle = settle
         if self.demo { loadDemo() }
+        else if let memoryPollInterval {
+            // The menu-bar icon follows memory even with every view closed; only memory_pressure runs.
+            memoryTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    await self?.refreshMemory()
+                    do { try await Task.sleep(for: memoryPollInterval) } catch { return }
+                }
+            }
+        }
+    }
+    deinit { memoryTask?.cancel() }
+
+    func refreshMemory() async {
+        guard !demo, let output = try? await command("/usr/bin/memory_pressure", [], 15),
+              let free = MachineParse.freePercent(text(output)) else { return }
+        freePercent = free
     }
 
     var verdict: LoadVerdict? { freePercent.map(LoadVerdict.init(freePercent:)) }

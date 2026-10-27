@@ -28,13 +28,20 @@ enum ProcessRunner {
     static let searchPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
     // `unsetting` removes inherited variables, e.g. credentials exported by the shell that launched the app.
+    // Cancelling the calling task stops the process and throws CancellationError.
     static func run(path: String, arguments: [String], timeout: TimeInterval = 120, environment: [String: String] = [:], unsetting: [String] = []) async throws -> CommandOutput {
-        try await Task.detached(priority: .userInitiated) {
-            try blockingRun(path: path, arguments: arguments, timeout: timeout, environment: environment, unsetting: unsetting)
-        }.value
+        let handle = RunningProcess()
+        return try await withTaskCancellationHandler {
+            try await Task.detached(priority: .userInitiated) {
+                try blockingRun(path: path, arguments: arguments, timeout: timeout, environment: environment, unsetting: unsetting, handle: handle)
+            }.value
+        } onCancel: {
+            handle.cancel()
+        }
     }
 
-    static func blockingRun(path: String, arguments: [String], timeout: TimeInterval, environment: [String: String], unsetting: [String] = []) throws -> CommandOutput {
+    static func blockingRun(path: String, arguments: [String], timeout: TimeInterval, environment: [String: String], unsetting: [String] = [],
+                            handle: RunningProcess? = nil) throws -> CommandOutput {
         guard path.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: path) else { throw ProcessFailure.notExecutable }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
@@ -53,6 +60,7 @@ enum ProcessRunner {
         let finished = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in finished.signal() }
         try process.run()
+        handle?.attach(process)
         let out = DataCollector(stdout.fileHandleForReading)
         let err = DataCollector(stderr.fileHandleForReading)
         let didTimeout = finished.wait(timeout: .now() + timeout) == .timedOut
@@ -64,8 +72,35 @@ enum ProcessRunner {
             }
         }
         let data = try out.result(), errorData = try err.result()
+        if handle?.isCancelled == true { throw CancellationError() }
         if didTimeout { throw ProcessFailure.timedOut }
         return CommandOutput(data: data, stderr: String(decoding: errorData, as: UTF8.self), status: process.terminationStatus)
+    }
+}
+
+// Lets a cancelled task stop its process: SIGTERM, then SIGKILL if it is still running 3 seconds later.
+final class RunningProcess: @unchecked Sendable {
+    private let lock = NSLock()
+    private var process: Process?
+    private var cancelled = false
+
+    var isCancelled: Bool { lock.withLock { cancelled } }
+
+    func attach(_ process: Process) {
+        let cancelledFirst = lock.withLock { () -> Bool in self.process = process; return cancelled }
+        if cancelledFirst { Self.stop(process) }
+    }
+
+    func cancel() {
+        let running = lock.withLock { () -> Process? in cancelled = true; return process }
+        if let running { Self.stop(running) }
+    }
+
+    private static func stop(_ process: Process) {
+        guard process.isRunning else { return }
+        process.terminate()
+        let pid = process.processIdentifier
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) { if process.isRunning { kill(pid, SIGKILL) } }
     }
 }
 

@@ -23,7 +23,7 @@ struct VPNMenuSection: View {
                 Button { Task { await vpn.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                     .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.muted).disabled(vpn.busy)
             }
-            VPNMessages(compact: true)
+            MessageList(errors: [vpn.error].compactMap { $0 }, notice: vpn.notice, compact: true) { vpn.notice = nil }
             if vpn.tunnels.isEmpty && vpn.error == nil {
                 Text("Checking tunnels…").font(.system(size: 14)).foregroundStyle(Palette.muted)
             }
@@ -33,26 +33,6 @@ struct VPNMenuSection: View {
                 .font(.system(size: 12)).foregroundStyle(Palette.muted)
         }
         .task { await vpn.refreshIfStale() }
-    }
-}
-
-struct VPNMessages: View {
-    @EnvironmentObject var vpn: VPNStore
-    var compact = false
-    var body: some View {
-        if let error = vpn.error {
-            if compact { Text(error).font(.system(size: 12)).foregroundStyle(.orange).textSelection(.enabled) }
-            else { Banner(text: error, icon: "exclamationmark.triangle", color: .orange) }
-        }
-        if let notice = vpn.notice {
-            HStack(alignment: .top) {
-                if compact { Text(notice).font(.system(size: 12)).foregroundStyle(Palette.mint).textSelection(.enabled) }
-                else { Banner(text: notice, icon: "checkmark.circle", color: Palette.mint) }
-                Spacer(minLength: 0)
-                Button { vpn.notice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
-                    .foregroundStyle(Palette.muted).padding(.top, compact ? 0 : 15).accessibilityLabel("Dismiss")
-            }
-        }
     }
 }
 
@@ -112,7 +92,7 @@ struct VPNDashboardView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     if vpn.demo { Banner(text: "Demo preview · sample tunnels, no real darwin-vpn calls. Relaunch without --demo to connect.", icon: "theatermasks", color: Palette.accent) }
-                    VPNMessages()
+                    MessageList(errors: [vpn.error].compactMap { $0 }, notice: vpn.notice) { vpn.notice = nil }
                     HStack(alignment: .center) {
                         VStack(alignment: .leading, spacing: 7) {
                             Text("VPN tunnels").font(.system(size: 32, weight: .semibold, design: .rounded))
@@ -139,21 +119,14 @@ struct VPNDashboardView: View {
     }
 
     var header: some View {
-        HStack {
-            Label("Network", systemImage: "network").foregroundStyle(Palette.muted).font(.system(size: 14, weight: .medium))
-            Text("/").foregroundStyle(Palette.muted.opacity(0.5)).padding(.horizontal, 7)
-            Text("VPN").font(.system(size: 14, weight: .medium))
-            Spacer()
-            if vpn.busy { ProgressView().controlSize(.small); Text("Working…").font(.system(size: 13)).foregroundStyle(Palette.muted) }
-            else if vpn.checkedAt != nil {
-                Text("Checked \(Dates.age(vpn.checkedAt, now: now).lowercased())").font(.system(size: 13)).foregroundStyle(Palette.muted)
-            }
+        ToolHeader(area: "Network", icon: "network", page: "VPN", working: vpn.busy ? "Working…" : nil,
+                   checked: vpn.checkedAt.map { "Checked \(Dates.age($0, now: now).lowercased())" }) {
             Button { Task { await vpn.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                 .buttonStyle(ActionStyle()).disabled(vpn.busy)
                 .help("Run darwin-vpn status again. ⌘R")
             Button { showSettings = true } label: { Image(systemName: "gearshape") }
                 .buttonStyle(ActionStyle()).disabled(vpn.busy).help("Settings")
-        }.padding(.horizontal, 30).frame(height: 78)
+        }
     }
 
     func tunnelCard(_ tunnel: Tunnel) -> some View {
@@ -215,7 +188,7 @@ struct VPNSettingsSheet: View {
                     let clean = path.trimmingCharacters(in: .whitespacesAndNewlines)
                     if clean != vpn.path { vpn.savePath(clean) }
                     dismiss()
-                }.buttonStyle(ActionStyle(primary: true)).disabled(!PrivilegedCommand.isSafePath(path.trimmingCharacters(in: .whitespacesAndNewlines)) || vpn.busy)
+                }.buttonStyle(ActionStyle(primary: true)).disabled(!Executable.isPlainPath(path.trimmingCharacters(in: .whitespacesAndNewlines)) || vpn.busy)
             }
         }.padding(30).frame(width: 560).background(Palette.background)
             .onAppear { path = vpn.path }

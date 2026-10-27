@@ -30,18 +30,20 @@ struct DevToolsApp: App {
                     case .cswap: Task { await cswap.refresh() }
                     case .vpn: Task { await vpn.refresh() }
                     case .machine: Task { await machine.refresh() }
-                    case .logins: Task { await aws.refresh() }; Task { await cli.refresh() }
+                    case .logins: Task { await refreshLogins(aws: aws, cli: cli) }
                     }
                 }
                 .keyboardShortcut("r")
                 .disabled(refreshDisabled)
             }
         }
-        MenuBarExtra("DevTools", systemImage: "wrench.and.screwdriver") {
+        MenuBarExtra {
             TimelineView(.periodic(from: .now, by: 15)) { _ in
                 MenuBarPanel().environmentObject(cswap).environmentObject(vpn).environmentObject(machine).environmentObject(aws).environmentObject(cli)
                     .preferredColorScheme(.dark)
             }
+        } label: {
+            MenuBarIcon(level: Attention.current(machine: machine, vpn: vpn, cli: cli).level)
         }
         .menuBarExtraStyle(.window)
     }

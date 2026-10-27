@@ -5,7 +5,8 @@ longer need.
 
 ## What it reads
 
-While its page or menu-bar tab is on screen it reads every 10 seconds (and on **Refresh** / ⌘R):
+While its page or menu-bar tab is on screen it reads every 10 seconds (and on **Refresh** / ⌘R). With
+every view closed, only memory is read, every 30 seconds, for the menu-bar icon.
 
 - **Memory free**: the `System-wide memory free percentage` from `/usr/bin/memory_pressure`, with a verdict:
   under 20% **Wait before heavy runs**, 20–24% **One heavy run at a time**, 25% and up **Fine to push**

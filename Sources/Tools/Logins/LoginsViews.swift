@@ -2,6 +2,13 @@ import SwiftUI
 import AppKit
 import Combine
 
+@MainActor
+func refreshLogins(aws: AWSStore, cli: CLILoginStore) async {
+    async let checkAWS: Void = aws.refresh()
+    async let checkCLI: Void = cli.refresh()
+    _ = await (checkAWS, checkCLI)
+}
+
 extension ProfileStatus {
     var color: Color {
         switch self {
@@ -23,27 +30,6 @@ extension ProfileStatus {
     }
 }
 
-struct LoginsMessages: View {
-    @EnvironmentObject var aws: AWSStore
-    @EnvironmentObject var cli: CLILoginStore
-    var compact = false
-    var body: some View {
-        ForEach(Array([aws.error, cli.error].compactMap { $0 }.enumerated()), id: \.offset) { _, error in
-            if compact { Text(error).font(.system(size: 12)).foregroundStyle(.orange).textSelection(.enabled) }
-            else { Banner(text: error, icon: "exclamationmark.triangle", color: .orange) }
-        }
-        if let notice = aws.notice ?? cli.notice {
-            HStack(alignment: .top) {
-                if compact { Text(notice).font(.system(size: 12)).foregroundStyle(Palette.mint) }
-                else { Banner(text: notice, icon: "checkmark.circle", color: Palette.mint) }
-                Spacer(minLength: 0)
-                Button { aws.notice = nil; cli.notice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
-                    .foregroundStyle(Palette.muted).padding(.top, compact ? 0 : 15).accessibilityLabel("Dismiss")
-            }
-        }
-    }
-}
-
 struct SessionLoginButton: View {
     @EnvironmentObject var aws: AWSStore
     let session: SSOSession
@@ -52,9 +38,10 @@ struct SessionLoginButton: View {
             HStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text("Approve in your browser…").font(.system(size: 12)).foregroundStyle(Palette.accent)
+                Button("Cancel") { aws.cancelLogin() }.buttonStyle(ActionStyle()).help("Stop waiting for the browser approval")
             }
         } else {
-            Button(aws.needsLogin(session) ? "Log in" : "Log in again") { Task { await aws.login(session) } }
+            Button(aws.needsLogin(session) ? "Log in" : "Log in again") { aws.beginLogin(session) }
                 .buttonStyle(ActionStyle(primary: aws.needsLogin(session))).disabled(aws.busy || aws.demo)
         }
     }
@@ -131,11 +118,11 @@ struct LoginsMenuSection: View {
             HStack {
                 Tag(text: aws.demo ? "Sample data" : "\(aws.signedInCount + cli.signedInCount) of \(aws.profileCount + CLITool.allCases.count) signed in")
                 Spacer()
-                Button { Task { await refreshAll() } } label: { Label("Check", systemImage: "arrow.clockwise") }
+                Button { Task { await refreshLogins(aws: aws, cli: cli) } } label: { Label("Check", systemImage: "arrow.clockwise") }
                     .buttonStyle(.plain).font(.system(size: 12, weight: .medium)).foregroundStyle(Palette.muted).disabled(aws.busy || cli.checking)
             }
-            LoginsMessages(compact: true)
-            Text("AWS").font(.system(size: 11, weight: .semibold)).tracking(1).foregroundStyle(Palette.muted)
+            MessageList(errors: [aws.error, cli.error].compactMap { $0 }, notice: aws.notice ?? cli.notice, compact: true) { aws.notice = nil; cli.notice = nil }
+            SectionLabel(text: "AWS")
             if aws.sessions.isEmpty && aws.error == nil {
                 Text("Reading ~/.aws/config…").font(.system(size: 13)).foregroundStyle(Palette.muted)
             }
@@ -146,7 +133,7 @@ struct LoginsMenuSection: View {
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text(session.name.uppercased()).font(.system(size: 11, weight: .semibold)).tracking(1).foregroundStyle(Palette.muted)
+                            SectionLabel(text: session.name.uppercased())
                             Spacer()
                             SessionLoginButton(session: session)
                         }
@@ -154,7 +141,7 @@ struct LoginsMenuSection: View {
                     }.padding(10).background(Palette.surface).clipShape(RoundedRectangle(cornerRadius: 9))
                 }
             }
-            Text("COMMAND-LINE TOOLS").font(.system(size: 11, weight: .semibold)).tracking(1).foregroundStyle(Palette.muted)
+            SectionLabel(text: "COMMAND-LINE TOOLS")
             ForEach(CLITool.allCases) { tool in
                 CLIRow(tool: tool, compact: true).padding(10).background(Palette.surface).clipShape(RoundedRectangle(cornerRadius: 9))
             }
@@ -167,11 +154,6 @@ struct LoginsMenuSection: View {
         }
     }
 
-    private func refreshAll() async {
-        async let checkAWS: Void = aws.refresh()
-        async let checkCLI: Void = cli.refresh()
-        _ = await (checkAWS, checkCLI)
-    }
 }
 
 struct LoginsDashboardView: View {
@@ -186,12 +168,12 @@ struct LoginsDashboardView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     if aws.demo { Banner(text: "Demo preview · sample logins, nothing is run. Relaunch without --demo to check yours.", icon: "theatermasks", color: Palette.accent) }
-                    LoginsMessages()
+                    MessageList(errors: [aws.error, cli.error].compactMap { $0 }, notice: aws.notice ?? cli.notice) { aws.notice = nil; cli.notice = nil }
                     VStack(alignment: .leading, spacing: 7) {
                         Text("Logins").font(.system(size: 32, weight: .semibold, design: .rounded))
                         Text("Who your command-line tools are signed in as, and a login for each.").font(.system(size: 15)).foregroundStyle(Palette.muted)
                     }
-                    sectionTitle("AWS", caption: "SSO profiles from ~/.aws/config. Each one on its own sso-session logs in separately.")
+                    SectionHeading(title: "AWS", caption: "SSO profiles from ~/.aws/config. Each one on its own sso-session logs in separately.")
                     ForEach(aws.sessions) { session in
                         if session.profiles.count == 1 {
                             card { ProfileRow(profile: session.profiles[0], session: session).padding(18) }
@@ -199,7 +181,7 @@ struct LoginsDashboardView: View {
                             sessionCard(session)
                         }
                     }
-                    sectionTitle("COMMAND-LINE TOOLS", caption: "Log in opens Terminal for the CLI's own sign-in, which may ask questions.")
+                    SectionHeading(title: "COMMAND-LINE TOOLS", caption: "Log in opens Terminal for the CLI's own sign-in, which may ask questions.")
                     card {
                         VStack(spacing: 0) {
                             ForEach(CLITool.allCases) { tool in
@@ -225,30 +207,10 @@ struct LoginsDashboardView: View {
     }
 
     var header: some View {
-        HStack {
-            Label("Cloud", systemImage: "cloud").foregroundStyle(Palette.muted).font(.system(size: 14, weight: .medium))
-            Text("/").foregroundStyle(Palette.muted.opacity(0.5)).padding(.horizontal, 7)
-            Text("Logins").font(.system(size: 14, weight: .medium))
-            Spacer()
-            if aws.checking || cli.checking { ProgressView().controlSize(.small); Text("Checking…").font(.system(size: 13)).foregroundStyle(Palette.muted) }
-            else if let checked = [aws.checkedAt, cli.checkedAt].compactMap({ $0 }).min() {
-                Text("Checked \(Dates.age(checked, now: now).lowercased())").font(.system(size: 13)).foregroundStyle(Palette.muted)
-            }
-            Button {
-                Task {
-                    async let checkAWS: Void = aws.refresh()
-                    async let checkCLI: Void = cli.refresh()
-                    _ = await (checkAWS, checkCLI)
-                }
-            } label: { Label("Check all", systemImage: "arrow.clockwise") }
+        ToolHeader(area: "Cloud", icon: "cloud", page: "Logins", working: aws.checking || cli.checking ? "Checking…" : nil,
+                   checked: [aws.checkedAt, cli.checkedAt].compactMap { $0 }.min().map { "Checked \(Dates.age($0, now: now).lowercased())" }) {
+            Button { Task { await refreshLogins(aws: aws, cli: cli) } } label: { Label("Check all", systemImage: "arrow.clockwise") }
                 .buttonStyle(ActionStyle()).disabled(aws.busy || cli.checking).help("Check every login again. ⌘R")
-        }.padding(.horizontal, 30).frame(height: 78)
-    }
-
-    func sectionTitle(_ title: String, caption: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(.system(size: 12, weight: .semibold)).tracking(1.5).foregroundStyle(Palette.muted)
-            Text(caption).font(.system(size: 13)).foregroundStyle(Palette.muted)
         }
     }
 

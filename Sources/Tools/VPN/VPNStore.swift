@@ -39,9 +39,7 @@ final class VPNStore: ObservableObject {
     deinit { pollingTask?.cancel() }
 
     static func discover() -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let candidates = ["/opt/homebrew/bin/darwin-vpn", "/usr/local/bin/darwin-vpn", "\(home)/.local/bin/darwin-vpn"]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? candidates[0]
+        Executable.first(["/opt/homebrew/bin/darwin-vpn", "/usr/local/bin/darwin-vpn", "\(Executable.home)/.local/bin/darwin-vpn"])
     }
 
     var connectedCount: Int { tunnels.filter(\.state.isConnected).count }

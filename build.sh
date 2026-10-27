@@ -1,5 +1,6 @@
 #!/bin/bash
-# Builds build/DevTools.app. With --install, also copies it to /Applications.
+# Builds build/DevTools.app. With --install, also replaces /Applications/DevTools.app and opens it,
+# quitting the running copy first.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP="$ROOT/build/DevTools.app"
@@ -42,10 +43,15 @@ echo "Built $APP"
 
 if [[ "${1:-}" == "--install" ]]; then
   if pgrep -x DevTools >/dev/null; then
-    echo "DevTools is running. Quit it from its menu-bar panel, then run ./build.sh --install again." >&2
-    exit 1
+    osascript -e 'tell application "DevTools" to quit' >/dev/null 2>&1 || true
+    for _ in $(seq 1 20); do pgrep -x DevTools >/dev/null || break; sleep 0.5; done
+    if pgrep -x DevTools >/dev/null; then
+      echo "DevTools did not quit within 10 seconds. Quit it from its menu-bar panel, then run ./build.sh --install again." >&2
+      exit 1
+    fi
   fi
   rm -rf /Applications/DevTools.app
   ditto "$APP" /Applications/DevTools.app
-  echo "Installed /Applications/DevTools.app"
+  open /Applications/DevTools.app
+  echo "Installed and opened /Applications/DevTools.app"
 fi

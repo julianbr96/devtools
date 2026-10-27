@@ -66,6 +66,7 @@ struct ToolRail: View {
 
 struct MenuBarPanel: View {
     @EnvironmentObject var cswap: DashboardStore
+    @EnvironmentObject var machine: MachineStore
     @EnvironmentObject var vpn: VPNStore
     @EnvironmentObject var aws: AWSStore
     @EnvironmentObject var cli: CLILoginStore
@@ -83,6 +84,7 @@ struct MenuBarPanel: View {
                 Picker("Tool", selection: $selected) {
                     ForEach(Tool.allCases) { Text($0.title).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden()
+                AttentionList(attention: Attention.current(machine: machine, vpn: vpn, cli: cli))
             }.padding(18)
             Divider().overlay(Palette.border)
             ScrollView {
@@ -109,5 +111,56 @@ struct MenuBarPanel: View {
         openWindow(id: "dashboard")
         if selected == .cswap, cswap.accountReview != nil { cswap.reviewLocation = .dashboard }
         NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+extension Attention {
+    @MainActor
+    static func current(machine: MachineStore, vpn: VPNStore, cli: CLILoginStore) -> Attention {
+        evaluate(freePercent: machine.freePercent, tunnels: vpn.tunnels, github: cli.status(.github))
+    }
+}
+
+extension AttentionLevel {
+    var color: Color { self == .critical ? .red : .orange }
+}
+
+// Why the menu-bar icon is not the plain wrench.
+struct AttentionList: View {
+    let attention: Attention
+    var body: some View {
+        if !attention.reasons.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(attention.reasons.enumerated()), id: \.offset) { _, reason in
+                    Label(reason.text, systemImage: reason.level == .critical ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill")
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(reason.level.color)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+// The menu-bar icon: the template wrench while all is well, an orange triangle or a red octagon
+// with a white "!" when something needs a look. Colors need a non-template image (a one-color palette
+// would paint the "!" too); the shape alone also tells them apart.
+struct MenuBarIcon: View {
+    let level: AttentionLevel
+    var body: some View { Image(nsImage: Self.image(for: level)) }
+
+    static func image(for level: AttentionLevel) -> NSImage {
+        let size = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
+        switch level {
+        case .ok:
+            let image = NSImage(systemSymbolName: "wrench.and.screwdriver", accessibilityDescription: "DevTools")?.withSymbolConfiguration(size) ?? NSImage()
+            image.isTemplate = true
+            return image
+        case .warning, .critical:
+            let name = level == .critical ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill"
+            let color: NSColor = level == .critical ? .systemRed : .systemOrange
+            let image = NSImage(systemSymbolName: name, accessibilityDescription: "DevTools needs attention")?
+                .withSymbolConfiguration(size.applying(NSImage.SymbolConfiguration(paletteColors: [.white, color]))) ?? NSImage()
+            image.isTemplate = false
+            return image
+        }
     }
 }

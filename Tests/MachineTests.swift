@@ -101,10 +101,15 @@ enum MachineTests {
         let machinePaths: [Int32: String] = [4242: "/opt/homebrew/bin/node", 4000: "/bin/zsh"]
         let store = MachineStore(demo: false, command: { path, args, _ in try await fake.run(path, args) },
                                  signal: { pid, sig in signals.record(pid, sig) }, quitApp: { bundle, force in quits.record(bundle, force) },
-                                 readSystem: { SystemReading(physicalBytes: 16 << 30) }, executablePath: { machinePaths[$0] }, settle: .zero)
+                                 readSystem: { SystemReading(physicalBytes: 16 << 30) }, executablePath: { machinePaths[$0] }, settle: .zero, memoryPollInterval: nil)
         await store.refresh()
         check(store.freePercent == 31 && store.verdict == .clear && store.listeners.map(\.process.pid) == [4242] && store.groups.first?.name == "node",
               "refresh reads memory, processes and listeners together")
+
+        await fake.setPressure(17)
+        await store.refreshMemory()
+        check(store.freePercent == 17 && store.listeners.map(\.process.pid) == [4242], "the background memory read updates only memory")
+        await fake.setPressure(31)
 
         let node = store.listeners[0].process
         await fake.setArgs("node server.js\n")
@@ -134,7 +139,7 @@ enum MachineTests {
         await fake.setPS("  61577 1 \(me) 200000 2.0 /Applications/Roam.app/Contents/MacOS/Roam\n")
         let roamStore = MachineStore(demo: false, command: { path, args, _ in try await fake.run(path, args) },
                                      signal: { pid, sig in signals.record(pid, sig) }, quitApp: { bundle, force in quits.record(bundle, force) },
-                                     readSystem: { SystemReading() }, executablePath: { paths[$0] }, settle: .zero)
+                                     readSystem: { SystemReading() }, executablePath: { paths[$0] }, settle: .zero, memoryPollInterval: nil)
         await roamStore.quit(roam)
         check(quits.calls.count == 1 && quits.calls[0].0 == "/Applications/Roam.app" && quits.calls[0].1 == false && roamStore.quitting["/Applications/Roam.app"] != nil,
               "quit asks the app to close, like ⌘Q")
@@ -147,7 +152,7 @@ enum MachineTests {
         check(roamStore.error?.contains("not running as an app") == true, "an app that cannot be found says so")
 
         let demo = MachineStore(demo: true, command: { path, args, _ in try await fake.run(path, args) },
-                                signal: { pid, sig in signals.record(pid, sig) }, quitApp: { bundle, force in quits.record(bundle, force) }, settle: .zero)
+                                signal: { pid, sig in signals.record(pid, sig) }, quitApp: { bundle, force in quits.record(bundle, force) }, settle: .zero, memoryPollInterval: nil)
         let before = await fake.calls.count, signalled = signals.calls.count, quitCount = quits.calls.count
         await demo.refresh()
         await demo.stop(demo.listeners[0].process, name: "node")
@@ -177,15 +182,17 @@ actor FixtureMachine {
     private var ps: String
     private var lsof: String
     private var args = ""
+    private var pressure = 31
     private(set) var calls: [[String]] = []
     init(ps: String, lsof: String) { self.ps = ps; self.lsof = lsof }
     func setArgs(_ value: String) { args = value }
     func setLsof(_ value: String) { lsof = value }
     func setPS(_ value: String) { ps = value }
+    func setPressure(_ value: Int) { pressure = value }
     func run(_ path: String, _ arguments: [String]) async throws -> CommandOutput {
         calls.append([path] + arguments)
         switch path {
-        case "/usr/bin/memory_pressure": return CommandOutput(data: Data("System-wide memory free percentage: 31%\n".utf8), stderr: "")
+        case "/usr/bin/memory_pressure": return CommandOutput(data: Data("System-wide memory free percentage: \(pressure)%\n".utf8), stderr: "")
         case "/usr/sbin/lsof": return CommandOutput(data: Data(lsof.utf8), stderr: "", status: lsof.isEmpty ? 1 : 0)
         case "/bin/ps" where arguments.first == "-axo": return CommandOutput(data: Data(ps.utf8), stderr: "")
         case "/bin/ps": return CommandOutput(data: Data(args.utf8), stderr: "", status: args.isEmpty ? 1 : 0)

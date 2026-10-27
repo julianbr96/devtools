@@ -3,9 +3,7 @@ import Foundation
 // CSWAP's process adapter: where cswap lives, its JSON error envelope, and its error messages.
 enum CLI {
     static func discover() -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let candidates = ["\(home)/.local/bin/cswap", "/opt/homebrew/bin/cswap", "/usr/local/bin/cswap"]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? candidates[0]
+        Executable.first(["\(Executable.home)/.local/bin/cswap", "/opt/homebrew/bin/cswap", "/usr/local/bin/cswap"])
     }
 
     static func run(path: String, arguments: [String], timeout: TimeInterval = 120) async throws -> CommandOutput {

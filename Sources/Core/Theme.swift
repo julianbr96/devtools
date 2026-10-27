@@ -54,3 +54,68 @@ struct Banner: View {
             .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(color.opacity(0.17)))
     }
 }
+
+// The small all-caps label above a group of rows.
+struct SectionLabel: View {
+    let text: String
+    var color: Color = Palette.muted
+    var body: some View {
+        Text(text).font(.system(size: 11, weight: .semibold)).tracking(1).foregroundStyle(color)
+    }
+}
+
+// A dashboard section's title with a one-line explanation under it.
+struct SectionHeading: View {
+    let title: String
+    let caption: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.system(size: 12, weight: .semibold)).tracking(1.5).foregroundStyle(Palette.muted)
+            Text(caption).font(.system(size: 13)).foregroundStyle(Palette.muted)
+        }
+    }
+}
+
+// The bar at the top of a tool's page: "Area / Page", what it is doing or when it last checked, and actions.
+struct ToolHeader<Actions: View>: View {
+    let area: String
+    let icon: String
+    let page: String
+    var working: String?
+    var checked: String?
+    @ViewBuilder let actions: Actions
+    var body: some View {
+        HStack {
+            Label(area, systemImage: icon).foregroundStyle(Palette.muted).font(.system(size: 14, weight: .medium))
+            Text("/").foregroundStyle(Palette.muted.opacity(0.5)).padding(.horizontal, 7)
+            Text(page).font(.system(size: 14, weight: .medium))
+            Spacer()
+            if let working { ProgressView().controlSize(.small); Text(working).font(.system(size: 13)).foregroundStyle(Palette.muted) }
+            else if let checked { Text(checked).font(.system(size: 13)).foregroundStyle(Palette.muted) }
+            actions
+        }.padding(.horizontal, 30).frame(height: 78)
+    }
+}
+
+// A tool's errors and its dismissible notice: plain lines in the menu-bar panel, banners on a page.
+struct MessageList: View {
+    let errors: [String]
+    let notice: String?
+    var compact = false
+    let dismiss: () -> Void
+    var body: some View {
+        ForEach(Array(errors.enumerated()), id: \.offset) { _, error in
+            if compact { Text(error).font(.system(size: 12)).foregroundStyle(.orange).textSelection(.enabled) }
+            else { Banner(text: error, icon: "exclamationmark.triangle", color: .orange) }
+        }
+        if let notice {
+            HStack(alignment: .top) {
+                if compact { Text(notice).font(.system(size: 12)).foregroundStyle(Palette.mint).textSelection(.enabled) }
+                else { Banner(text: notice, icon: "checkmark.circle", color: Palette.mint) }
+                Spacer(minLength: 0)
+                Button(action: dismiss) { Image(systemName: "xmark") }.buttonStyle(.plain)
+                    .foregroundStyle(Palette.muted).padding(.top, compact ? 0 : 15).accessibilityLabel("Dismiss")
+            }
+        }
+    }
+}

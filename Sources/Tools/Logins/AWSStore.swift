@@ -6,8 +6,9 @@ final class AWSStore: ObservableObject {
     @Published private(set) var statuses: [String: ProfileStatus] = [:]
     @Published private(set) var checkedAt: Date?
     @Published private(set) var checking = false
-    // The session whose browser login is running.
+    // The session whose browser login is running, and the task running it (so Cancel can stop it).
     @Published private(set) var loggingIn: String?
+    private(set) var loginTask: Task<Void, Never>?
     @Published var error: String?
     @Published var notice: String?
     let path: String
@@ -32,9 +33,7 @@ final class AWSStore: ObservableObject {
     }
 
     static func discover() -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let candidates = ["/opt/homebrew/bin/aws", "/usr/local/bin/aws", "\(home)/.local/bin/aws"]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? candidates[0]
+        Executable.first(["/opt/homebrew/bin/aws", "/usr/local/bin/aws", "\(Executable.home)/.local/bin/aws"])
     }
 
     var busy: Bool { checking || loggingIn != nil }
@@ -92,7 +91,23 @@ final class AWSStore: ObservableObject {
     // Opens the browser for approval and waits for it; the CLI caches the SSO token itself.
     func login(_ session: SSOSession) async {
         guard !busy, !demo else { return }
-        loggingIn = session.id; error = nil; notice = nil
+        loggingIn = session.id
+        await runLogin(session)
+    }
+
+    // The button's entry point: the login runs in a task that cancelLogin() can stop.
+    func beginLogin(_ session: SSOSession) {
+        guard !busy, !demo, loginTask == nil else { return }
+        loggingIn = session.id
+        loginTask = Task { await runLogin(session) }
+    }
+
+    // Stops the waiting `aws sso login`; nothing was signed in, so nothing is re-checked.
+    func cancelLogin() { loginTask?.cancel() }
+
+    private func runLogin(_ session: SSOSession) async {
+        error = nil; notice = nil
+        defer { loggingIn = nil; loginTask = nil }
         do {
             let output = try await command(path, session.loginArguments, 300)
             if output.status != 0 {
@@ -100,6 +115,9 @@ final class AWSStore: ObservableObject {
                 throw DashboardError.message(message.isEmpty ? "aws sso login exited with code \(output.status)." : message)
             }
             notice = "Logged in to \(session.name)."
+        } catch is CancellationError {
+            notice = "Cancelled the \(session.name) login."
+            return
         } catch ProcessFailure.timedOut {
             error = "The \(session.name) login was not approved within 5 minutes. Try again."
         } catch { self.error = error.localizedDescription }

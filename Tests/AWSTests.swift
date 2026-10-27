@@ -78,6 +78,20 @@ enum AWSTests {
         check(loginCalls.first == ["sso", "login", "--sso-session", "acme"] && loginCalls.count == 3, "login runs once, then re-checks only that session's profiles")
         check(store.notice == "Logged in to acme." && store.loggingIn == nil && !store.needsLogin(store.sessions[0]), "a successful login signs in the whole session")
 
+        await fake.hangLogin(true)
+        let loginsBefore = await fake.calls.filter { $0.starts(with: ["sso", "login"]) }.count
+        store.beginLogin(store.sessions[1])
+        let waiting = store.loginTask
+        check(store.loggingIn == store.sessions[1].id && waiting != nil, "a login shows as waiting for the browser")
+        while await fake.calls.filter({ $0.starts(with: ["sso", "login"]) }).count == loginsBefore { await Task.yield() }
+        let beforeCancel = await fake.calls.count
+        store.cancelLogin()
+        await waiting?.value
+        let afterCancel = await fake.calls.count
+        check(store.loggingIn == nil && store.loginTask == nil && store.error == nil && store.notice == "Cancelled the old-style login."
+              && afterCancel == beforeCancel, "Cancel stops the waiting login and re-checks nothing")
+        await fake.hangLogin(false)
+
         await fake.failLogin("Error: browser authorization was denied\n")
         await store.login(store.sessions[1])
         check(store.error == "Error: browser authorization was denied" && store.loggingIn == nil, "a failed login shows the CLI's message")
@@ -114,13 +128,16 @@ enum AWSTests {
 actor FixtureAWS {
     private var signedIn: Set<String>
     private var loginError: String?
+    private var hang = false
     private(set) var calls: [[String]] = []
     init(signedIn: Set<String>) { self.signedIn = signedIn }
     func signIn(_ profiles: Set<String>) { signedIn = profiles; loginError = nil }
     func failLogin(_ message: String) { loginError = message }
+    func hangLogin(_ value: Bool) { hang = value }
     func run(_ args: [String]) async throws -> CommandOutput {
         calls.append(args)
         if args.starts(with: ["sso", "login"]) {
+            if hang { try await Task.sleep(for: .seconds(60)) }
             if let loginError { return CommandOutput(data: Data(), stderr: loginError, status: 1) }
             return CommandOutput(data: Data("Successfully logged into Start URL: https://acme.awsapps.com/start\n".utf8), stderr: "")
         }

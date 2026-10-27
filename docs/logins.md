@@ -22,7 +22,8 @@ when the page or tab opens (if the last check is over 5 minutes old) and on **Ch
 - anything else (network, permissions) → the CLI's first error line, never a false sign-out.
 
 **Log in** runs `aws sso login --sso-session <name>` (`--profile <name>` for a legacy profile), which
-opens the browser for approval, waits up to 5 minutes, then re-checks that session's profiles.
+opens the browser for approval, waits up to 5 minutes, then re-checks that session's profiles. While it
+waits, **Cancel** stops the CLI (SIGTERM, then SIGKILL after 3 seconds) and re-checks nothing.
 
 Every aws call drops `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`,
 `AWS_CREDENTIAL_EXPIRATION`, `AWS_PROFILE` and `AWS_DEFAULT_PROFILE` from its environment, so credentials
@@ -44,7 +45,8 @@ the token is discarded inside the shell and never reaches the app. Status checks
 
 These logins ask questions, so **Log in** writes `DevTools-login-<tool>.command` (mode 700) to the temp
 directory and opens it, which runs it in Terminal. Only the CLI's plain path and fixed arguments go into
-that script. The next time the tab or page opens, DevTools re-checks instead of using the cached status.
+that script. The next time the tab or page opens, DevTools re-checks instead of using the cached status. Both CLIs
+are also checked at launch and every 30 minutes, for the menu-bar icon.
 
 A CLI found at none of `/opt/homebrew/bin`, `/usr/local/bin`, `~/.local/bin` or `~/google-cloud-sdk/bin`
 shows as not installed and runs nothing.

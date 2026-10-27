@@ -160,7 +160,7 @@ struct MachineMenuSection: View {
             if let error = machine.error { Text(error).font(.system(size: 12)).foregroundStyle(.orange).textSelection(.enabled) }
             if let free = machine.freePercent, let verdict = machine.verdict {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("MEMORY FREE").font(.system(size: 11, weight: .semibold)).tracking(1).foregroundStyle(verdict.color)
+                    SectionLabel(text: "MEMORY FREE", color: verdict.color)
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text("\(free)%").font(.system(size: 34, weight: .semibold, design: .rounded)).monospacedDigit()
                         Text(verdict.title).font(.system(size: 14, weight: .semibold)).foregroundStyle(verdict.color)
@@ -176,14 +176,14 @@ struct MachineMenuSection: View {
                 Text("Reading memory…").font(.system(size: 14)).foregroundStyle(Palette.muted)
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(MachineCopy.serversTitle).font(.system(size: 11, weight: .semibold)).tracking(1).foregroundStyle(Palette.muted)
+                SectionLabel(text: MachineCopy.serversTitle)
                 Text(MachineCopy.serversCaption).font(.system(size: 11)).foregroundStyle(Palette.muted).fixedSize(horizontal: false, vertical: true)
             }
             if machine.listeners.isEmpty {
                 Text(MachineCopy.noServers).font(.system(size: 13)).foregroundStyle(Palette.muted)
             }
             ForEach(machine.listeners) { ListenerRow(listener: $0, compact: true) }
-            Text(MachineCopy.heaviestTitle).font(.system(size: 11, weight: .semibold)).tracking(1).foregroundStyle(Palette.muted)
+            SectionLabel(text: MachineCopy.heaviestTitle)
             VStack(spacing: 0) {
                 ForEach(machine.groups.prefix(5)) { GroupRow(group: $0, compact: true) }
             }
@@ -272,17 +272,11 @@ struct MachineDashboardView: View {
     }
 
     var header: some View {
-        HStack {
-            Label("This Mac", systemImage: "desktopcomputer").foregroundStyle(Palette.muted).font(.system(size: 14, weight: .medium))
-            Text("/").foregroundStyle(Palette.muted.opacity(0.5)).padding(.horizontal, 7)
-            Text("Load").font(.system(size: 14, weight: .medium))
-            Spacer()
-            if machine.checkedAt != nil {
-                Text("Checked \(Dates.age(machine.checkedAt, now: now).lowercased())").font(.system(size: 13)).foregroundStyle(Palette.muted)
-            }
+        ToolHeader(area: "This Mac", icon: "desktopcomputer", page: "Load",
+                   checked: machine.checkedAt.map { "Checked \(Dates.age($0, now: now).lowercased())" }) {
             Button { Task { await machine.refresh() } } label: { Label("Refresh", systemImage: "arrow.clockwise") }
                 .buttonStyle(ActionStyle()).disabled(machine.busy).help("Read memory, processes and ports again. ⌘R")
-        }.padding(.horizontal, 30).frame(height: 78)
+        }
     }
 
     var memoryCard: some View {
@@ -315,10 +309,7 @@ struct MachineDashboardView: View {
 
     func section<Content: View>(_ title: String, caption: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text(title).font(.system(size: 12, weight: .semibold)).tracking(1.5).foregroundStyle(Palette.muted)
-                Text(caption).font(.system(size: 13)).foregroundStyle(Palette.muted)
-            }
+            SectionHeading(title: title, caption: caption)
             content()
         }
     }

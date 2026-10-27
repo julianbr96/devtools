@@ -89,7 +89,8 @@ enum PrivilegedOutcome: Equatable {
 // shows the standard macOS password prompt instead and runs the command as root.
 enum PrivilegedCommand {
     static func appleScript(executable: String, action: VPNAction, environment: String) throws -> String {
-        guard isSafePath(executable) else {
+        // The path is interpolated into a root shell command, so only plain path characters pass.
+        guard Executable.isPlainPath(executable) else {
             throw DashboardError.message("The darwin-vpn path may only contain letters, digits, '.', '_', '-' and '/'. Choose it again in Settings.")
         }
         guard VPNStatus.isEnvironmentName(environment) else {
@@ -99,11 +100,6 @@ enum PrivilegedCommand {
         let prompt = "DevTools needs your password to \(action == .up ? "connect" : "disconnect") \(target)."
         let shell = "PATH=\(ProcessRunner.searchPath) '\(executable)' \(action.rawValue) \(environment) 2>&1"
         return "do shell script \"\(shell)\" with prompt \"\(prompt)\" with administrator privileges without altering line endings"
-    }
-
-    // The path is interpolated into a root shell command, so only plain path characters pass.
-    static func isSafePath(_ path: String) -> Bool {
-        path.range(of: #"^/[A-Za-z0-9._/-]+$"#, options: .regularExpression) != nil && !path.contains("..")
     }
 
     static func outcome(_ output: CommandOutput) -> PrivilegedOutcome {

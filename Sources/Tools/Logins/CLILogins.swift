@@ -37,9 +37,8 @@ enum CLITool: String, CaseIterable, Identifiable, Sendable {
     }
 
     func discover() -> String {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let candidates = ["/opt/homebrew/bin/\(executable)", "/usr/local/bin/\(executable)", "\(home)/.local/bin/\(executable)", "\(home)/google-cloud-sdk/bin/\(executable)"]
-        return candidates.first { FileManager.default.isExecutableFile(atPath: $0) } ?? candidates[0]
+        Executable.first(["/opt/homebrew/bin/\(executable)", "/usr/local/bin/\(executable)",
+                          "\(Executable.home)/.local/bin/\(executable)", "\(Executable.home)/google-cloud-sdk/bin/\(executable)"])
     }
 }
 
@@ -64,7 +63,7 @@ enum CLIStatus {
     // Minting an access token proves the stored refresh token still works. The token goes to
     // /dev/null inside the shell, so it never reaches this app.
     static func gcloudTokenCommand(executable: String) throws -> [String] {
-        guard PrivilegedCommand.isSafePath(executable) else { throw DashboardError.message("Unexpected gcloud path: \(executable)") }
+        guard Executable.isPlainPath(executable) else { throw DashboardError.message("Unexpected gcloud path: \(executable)") }
         return ["-c", "'\(executable)' auth print-access-token --quiet >/dev/null"]
     }
 
@@ -74,7 +73,7 @@ enum CLIStatus {
 
     // The Terminal script for an interactive login. Only plain paths and fixed arguments go in.
     static func loginScript(tool: CLITool, executable: String) throws -> String {
-        guard PrivilegedCommand.isSafePath(executable) else { throw DashboardError.message("Unexpected \(tool.executable) path: \(executable)") }
+        guard Executable.isPlainPath(executable) else { throw DashboardError.message("Unexpected \(tool.executable) path: \(executable)") }
         return """
         #!/bin/zsh -l
         clear
@@ -102,6 +101,7 @@ final class CLILoginStore: ObservableObject {
     private let scriptDirectory: URL
     // A Terminal login finishes outside the app; the next look re-checks instead of trusting the cache.
     private var recheckPending = false
+    private var pollingTask: Task<Void, Never>?
 
     init(demo: Bool? = nil, paths: [CLITool: String]? = nil, scriptDirectory: URL = FileManager.default.temporaryDirectory,
          command: @escaping CommandRunner = { path, args, timeout in
@@ -109,7 +109,8 @@ final class CLILoginStore: ObservableObject {
                                          environment: ["CLOUDSDK_CORE_DISABLE_PROMPTS": "1", "GH_PROMPT_DISABLED": "1", "NO_COLOR": "1"],
                                          unsetting: CLITool.allCases.flatMap(\.inheritedCredentials))
          },
-         openInTerminal: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) }) {
+         openInTerminal: @escaping @MainActor (URL) -> Bool = { NSWorkspace.shared.open($0) },
+         pollInterval: Duration? = .seconds(1800)) {
         self.demo = demo ?? CommandLine.arguments.contains("--demo")
         self.paths = paths ?? Dictionary(uniqueKeysWithValues: CLITool.allCases.map { ($0, $0.discover()) })
         self.scriptDirectory = scriptDirectory
@@ -118,8 +119,17 @@ final class CLILoginStore: ObservableObject {
         if self.demo {
             statuses = [.github: .signedIn(account: "octocat", role: nil), .gcloud: .expired]
             checkedAt = Date()
+        } else if let pollInterval {
+            // The menu-bar icon shows a GitHub sign-out, so status is also checked with every view closed.
+            pollingTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    await self?.refresh()
+                    do { try await Task.sleep(for: pollInterval) } catch { return }
+                }
+            }
         }
     }
+    deinit { pollingTask?.cancel() }
 
     var signedInCount: Int { statuses.values.filter(\.isSignedIn).count }
     func status(_ tool: CLITool) -> ProfileStatus { statuses[tool] ?? .unknown }
